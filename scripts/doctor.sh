@@ -10,10 +10,10 @@ set -uo pipefail
 PASS=0; FAIL=0; WARN=0
 GREEN='\033[32m'; RED='\033[31m'; YEL='\033[33m'; DIM='\033[90m'; CYA='\033[36m'; RST='\033[0m'
 
-hdr()  { printf "\n${CYA}%s${RST}\n" "$*"; }
-pass() { printf "  ${GREEN}PASS${RST}  %-22s ${DIM}%s${RST}\n" "$1" "${2:-}"; PASS=$((PASS+1)); }
-fail() { printf "  ${RED}FAIL${RST}  %-22s ${DIM}%s${RST}\n" "$1" "${2:-}"; FAIL=$((FAIL+1)); }
-warn() { printf "  ${YEL}WARN${RST}  %-22s ${DIM}%s${RST}\n" "$1" "${2:-}"; WARN=$((WARN+1)); }
+hdr()  { printf '\n%b%s%b\n' "$CYA" "$*" "$RST"; }
+pass() { printf '  %bPASS%b  %-22s %b%s%b\n' "$GREEN" "$RST" "$1" "$DIM" "${2:-}" "$RST"; PASS=$((PASS+1)); }
+fail() { printf '  %bFAIL%b  %-22s %b%s%b\n' "$RED" "$RST" "$1" "$DIM" "${2:-}" "$RST"; FAIL=$((FAIL+1)); }
+warn() { printf '  %bWARN%b  %-22s %b%s%b\n' "$YEL" "$RST" "$1" "$DIM" "${2:-}" "$RST"; WARN=$((WARN+1)); }
 
 # check <label> <command that prints a version>
 check() {
@@ -25,7 +25,7 @@ check() {
   fi
 }
 
-printf "\n${CYA}Palisade environment check${RST}\n"
+printf '\n%bPalisade environment check%b\n' "$CYA" "$RST"
 
 # --- host --------------------------------------------------------------------
 hdr "Host"
@@ -36,15 +36,23 @@ else
 fi
 CPUS=$(nproc)
 MEM_GB=$(awk '/MemTotal/ {printf "%.1f", $2/1048576}' /proc/meminfo)
-[ "$CPUS" -ge 4 ] && pass "cpus" "${CPUS} logical" || warn "cpus" "${CPUS} - expect slow builds"
-awk -v m="$MEM_GB" 'BEGIN{exit !(m>=7)}' \
-  && pass "memory" "${MEM_GB} GB visible to Linux" \
-  || warn "memory" "${MEM_GB} GB - tight; use make up-lite"
+if [ "$CPUS" -ge 4 ]; then
+  pass "cpus" "${CPUS} logical"
+else
+  warn "cpus" "${CPUS} - expect slow builds"
+fi
+if awk -v m="$MEM_GB" 'BEGIN{exit !(m>=7)}'; then
+  pass "memory" "${MEM_GB} GB visible to Linux"
+else
+  warn "memory" "${MEM_GB} GB - tight; use make up-lite"
+fi
 
 DISK_AVAIL=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc '0-9')
-[ "${DISK_AVAIL:-0}" -ge 25 ] \
-  && pass "disk" "${DISK_AVAIL} GB free in \$HOME" \
-  || warn "disk" "${DISK_AVAIL} GB free - vLLM images need ~15 GB"
+if [ "${DISK_AVAIL:-0}" -ge 25 ]; then
+  pass "disk" "${DISK_AVAIL} GB free in \$HOME"
+else
+  warn "disk" "${DISK_AVAIL} GB free - vLLM images need ~15 GB"
+fi
 
 # --- GPU ---------------------------------------------------------------------
 hdr "GPU"
@@ -139,6 +147,6 @@ else
 fi
 
 # --- summary -----------------------------------------------------------------
-printf "\n${CYA}Summary${RST}  ${GREEN}%d passed${RST}  ${YEL}%d warnings${RST}  ${RED}%d failed${RST}\n\n" \
-  "$PASS" "$WARN" "$FAIL"
+printf '\n%bSummary%b  %b%d passed%b  %b%d warnings%b  %b%d failed%b\n\n' \
+  "$CYA" "$RST" "$GREEN" "$PASS" "$RST" "$YEL" "$WARN" "$RST" "$RED" "$FAIL" "$RST"
 [ "$FAIL" -eq 0 ] || exit 1

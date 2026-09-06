@@ -16,19 +16,19 @@ GREEN='\033[32m'; RED='\033[31m'; CYA='\033[36m'; RST='\033[0m'
 
 kubectl --context "$CTX" -n "$NS" delete job "$JOB" --ignore-not-found >/dev/null 2>&1
 
-printf "\n${CYA}==>${RST} Submitting the GPU check job\n"
+printf '\n%b==>%b Submitting the GPU check job\n' "$CYA" "$RST"
 kubectl --context "$CTX" -n "$NS" apply -f "$(dirname "${BASH_SOURCE[0]}")/../k8s/gpu-check.yaml" >/dev/null
 
-printf "${CYA}==>${RST} Waiting for completion (up to 3 min)\n"
+printf '%b==>%b Waiting for completion (up to 3 min)\n' "$CYA" "$RST"
 if kubectl --context "$CTX" -n "$NS" wait --for=condition=complete "job/$JOB" --timeout=180s >/dev/null 2>&1; then
   echo ""
   kubectl --context "$CTX" -n "$NS" logs "job/$JOB"
-  printf "\n${GREEN}M0 ACCEPTANCE PASSED${RST} - Kubernetes scheduled a pod that can see the GPU.\n\n"
+  printf '\n%bM0 ACCEPTANCE PASSED%b - Kubernetes scheduled a pod that can see the GPU.\n\n' "$GREEN" "$RST"
   kubectl --context "$CTX" -n "$NS" delete job "$JOB" >/dev/null 2>&1 || true
   exit 0
 fi
 
-printf "\n${RED}M0 ACCEPTANCE FAILED${RST}\n\n"
+printf '\n%bM0 ACCEPTANCE FAILED%b\n\n' "$RED" "$RST"
 echo "--- job description ---"
 kubectl --context "$CTX" -n "$NS" describe job "$JOB" | tail -25
 echo ""

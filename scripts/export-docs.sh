@@ -23,24 +23,24 @@ SRC="$ROOT/documentation"
 GREEN='\033[32m'; YEL='\033[33m'; CYA='\033[36m'; RST='\033[0m'
 
 if [ ! -d "$(dirname "$DEST")" ]; then
-  printf "  ${YEL}note${RST} %s does not exist - is the drive mounted?\n" "$(dirname "$DEST")"
+  printf '  %bnote%b %s does not exist - is the drive mounted?\n' "$YEL" "$RST" "$(dirname "$DEST")"
   exit 1
 fi
 
 mkdir -p "$DEST"
 
-printf "\n${CYA}==>${RST} Exporting to %s\n" "$DEST"
+printf '\n%b==>%b Exporting to %s\n' "$CYA" "$RST" "$DEST"
 count=0
 shopt -s nullglob
 for f in "$SRC"/*.docx; do
   cp -f "$f" "$DEST/"
-  printf "  ${GREEN}ok${RST}   %s\n" "$(basename "$f")"
+  printf '  %bok%b   %s\n' "$GREEN" "$RST" "$(basename "$f")"
   count=$((count+1))
 done
 shopt -u nullglob
 
 if [ "$count" = "0" ]; then
-  printf "  ${YEL}note${RST} no .docx found in %s - build one first: cd documentation/_build && python build.py m0\n" "$SRC"
+  printf '  %bnote%b no .docx found in %s - build one first: cd documentation/_build && python build.py m0\n' "$YEL" "$RST" "$SRC"
   exit 1
 fi
 

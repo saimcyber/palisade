@@ -33,10 +33,10 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 GREEN='\033[32m'; DIM='\033[90m'; CYA='\033[36m'; YEL='\033[33m'; RST='\033[0m'
-ok()   { printf "  ${GREEN}%-9s${RST} %s\n" "installed" "$*"; }
-skip() { printf "  ${DIM}%-9s${RST} %s\n" "current" "$*"; }
-upg()  { printf "  ${YEL}%-9s${RST} %s\n" "upgraded" "$*"; }
-step() { printf "\n${CYA}==>${RST} %s\n" "$*"; }
+ok()   { printf '  %b%-9s%b %s\n' "$GREEN" "installed" "$RST" "$*"; }
+skip() { printf '  %b%-9s%b %s\n' "$DIM" "current" "$RST" "$*"; }
+upg()  { printf '  %b%-9s%b %s\n' "$YEL" "upgraded" "$RST" "$*"; }
+step() { printf '\n%b==>%b %s\n' "$CYA" "$RST" "$*"; }
 
 # semver-ish extraction from arbitrary version output
 curver() { "$@" 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
@@ -172,4 +172,4 @@ RC
 fi
 ok "completions + aliases in ~/.bashrc"
 
-printf "\n${GREEN}Toolchain ready.${RST} Next: ${CYA}make doctor${RST}\n\n"
+printf '\n%bToolchain ready.%b Next: %bmake doctor%b\n\n' "$GREEN" "$RST" "$CYA" "$RST"

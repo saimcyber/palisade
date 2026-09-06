@@ -34,10 +34,10 @@ SPEC=/etc/cdi/nvidia.yaml
 DXCORE=/usr/lib/x86_64-linux-gnu/libdxcore.so
 
 GREEN='\033[32m'; YEL='\033[33m'; RED='\033[31m'; CYA='\033[36m'; RST='\033[0m'
-ok()   { printf "  ${GREEN}ok${RST}   %s\n" "$*"; }
-note() { printf "  ${YEL}note${RST} %s\n" "$*"; }
-die()  { printf "  ${RED}fail${RST} %s\n" "$*" >&2; exit 1; }
-step() { printf "\n${CYA}==>${RST} %s\n" "$*"; }
+ok()   { printf '  %bok%b   %s\n' "$GREEN" "$RST" "$*"; }
+note() { printf '  %bnote%b %s\n' "$YEL" "$RST" "$*"; }
+die()  { printf '  %bfail%b %s\n' "$RED" "$RST" "$*" >&2; exit 1; }
+step() { printf '\n%b==>%b %s\n' "$CYA" "$RST" "$*"; }
 
 docker inspect "$NODE" >/dev/null 2>&1 || die "node container '$NODE' not found"
 

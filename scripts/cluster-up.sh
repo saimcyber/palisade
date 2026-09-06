@@ -30,10 +30,10 @@ HTTPS_PORT="${HTTPS_PORT:-8443}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GREEN='\033[32m'; RED='\033[31m'; YEL='\033[33m'; CYA='\033[36m'; RST='\033[0m'
-step() { printf "\n${CYA}==>${RST} %s\n" "$*"; }
-ok()   { printf "  ${GREEN}ok${RST}   %s\n" "$*"; }
-die()  { printf "  ${RED}fail${RST} %s\n" "$*" >&2; exit 1; }
-note() { printf "  ${YEL}note${RST} %s\n" "$*"; }
+step() { printf '\n%b==>%b %s\n' "$CYA" "$RST" "$*"; }
+ok()   { printf '  %bok%b   %s\n' "$GREEN" "$RST" "$*"; }
+die()  { printf '  %bfail%b %s\n' "$RED" "$RST" "$*" >&2; exit 1; }
+note() { printf '  %bnote%b %s\n' "$YEL" "$RST" "$*"; }
 
 IS_WSL=0
 grep -qi microsoft /proc/version 2>/dev/null && IS_WSL=1
@@ -146,4 +146,4 @@ step "Cluster ready"
 kubectl get nodes -o wide
 printf "\n  Ingress HTTP  -> http://localhost:%s\n" "$HTTP_PORT"
 printf "  Ingress HTTPS -> https://localhost:%s\n" "$HTTPS_PORT"
-printf "\n  Next: ${CYA}make gpu-check${RST}\n\n"
+printf '\n  Next: %bmake gpu-check%b\n\n' "$CYA" "$RST"
