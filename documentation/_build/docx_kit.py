@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""docx_kit - shared formatting toolkit for Palisade learning documents.
+"""docx_kit - shared formatting toolkit for Palisade milestone documents.
 
 Used by build.py to render one .docx per milestone. Keeping the generator in
 the repo means every milestone document comes out with identical structure and

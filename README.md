@@ -82,15 +82,15 @@ docker/          the GPU-capable k3s node image
 scripts/         lifecycle and verification scripts
 k8s/             standalone manifests (currently the GPU acceptance test)
 docs/            architecture, ADRs, threat model, SLO, runbook
-learning/        a Word document per milestone — what was built and why
+documentation/   a Word document per milestone — what was built and why
 tests/           unit, integration and k6 load tests
 ```
 
 ## Documentation
 
 - [`docs/adr/`](docs/adr/) — architecture decision records
-- [`learning/`](learning/) — per-milestone write-ups covering what was built, what
-  differed from the plan, the limitations, and why each tool was chosen over its
+- [`documentation/`](documentation/) — per-milestone write-ups covering what was built,
+  what differed from the plan, the limitations, and why each tool was chosen over its
   alternatives
 
 ## Licence

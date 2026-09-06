@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Content for the M0 learning document."""
+"""Content for the M0 engineering document."""
 from docx_kit import *   # noqa: F403
 
 
@@ -35,7 +35,7 @@ def cover(D):
     r = p.add_run("PALISADE")
     r.bold = True; r.font.size = Pt(26); r.font.name = BODY_FONT; r.font.color.rgb = WHITE
     p2 = c.add_paragraph(); no_space(p2, 2, 2)
-    r = p2.add_run("Learning Log  ·  Milestone M0")
+    r = p2.add_run("Engineering Log  ·  Milestone M0")
     r.font.size = Pt(17); r.font.name = BODY_FONT
     r.font.color.rgb = RGBColor(0xC9, 0xE6, 0xE9)
     p3 = c.add_paragraph(); no_space(p3, 4, 20)
@@ -45,10 +45,10 @@ def cover(D):
 
     D.spacer(10)
     D.p("WHAT THIS DOCUMENT IS", size=9.5, bold=True, color=SLATE, after=2)
-    D.p("A record of everything done in Milestone M0: what was built, how, what went wrong, "
-        "what was decided differently from the original plan, why each tool was chosen over its "
-        "alternatives, and what this setup cannot do. Every idea is given twice - once in plain "
-        "language, once technically.", after=10)
+    D.p("A build record for Milestone M0: what was built, how, what went wrong, what was decided "
+        "differently from the original plan, why each tool was chosen over its alternatives, and "
+        "what the resulting setup cannot do. Every idea is given twice - once in plain language, "
+        "once technically - so it is useful whether or not you know Kubernetes.", after=10)
 
     D.table(
         ["Field", "Detail"],
@@ -256,7 +256,7 @@ def what_was_built(D):
 +-- docker/k3s-nvidia/       Dockerfile for the custom k3s node image
 +-- k8s/gpu-check.yaml       the M0 acceptance test, as a Job
 +-- docs/adr/                0001 record decisions - 0002 the GPU investigation
-+-- learning/                this document
++-- documentation/           this document
 +-- services/ infra/ deploy/ observability/ tests/    (scaffolded, filled from M1)""", size=8.0)
 
     D.h2("4.3  The toolchain")
@@ -516,8 +516,8 @@ def limitations(D):
 
 
 def explain(D):
-    D.h1("9. What You Should Be Able to Explain")
-    D.p("If you can answer these without notes, M0 has done its job.")
+    D.h1("9. Design Rationale - Questions Answered")
+    D.p("The questions a reviewer is most likely to ask about this milestone, and the reasoning behind each answer.")
     qs = [
         ("Why did you test the GPU before writing any code?",
          "Because it was the only part of the design that could force an architecture change. Everything "
@@ -565,7 +565,7 @@ def explain(D):
 
 
 def glossary_and_next(D):
-    D.h1("10. New Terms From M0")
+    D.h1("10. Glossary - Terms Introduced in M0")
     D.table(
         ["Term", "Plain meaning"],
         [

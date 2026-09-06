@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Build a Palisade learning document.
+Build a Palisade engineering document (one per milestone).
 
     python build.py m0          -> ../M0-Foundations.docx
     python build.py --all       -> every milestone module found
@@ -22,12 +22,12 @@ from docx_kit import Doc  # noqa: E402
 
 # milestone key -> (module, output filename, footer label)
 MILESTONES = {
-    "m0": ("m0", "M0-Foundations.docx", "Palisade Learning Log - M0 Foundations"),
-    "m1": ("m1", "M1-Inference-Service.docx", "Palisade Learning Log - M1 Inference Service"),
-    "m2": ("m2", "M2-Supply-Chain-CICD.docx", "Palisade Learning Log - M2 Supply Chain & CI/CD"),
-    "m3": ("m3", "M3-Kubernetes-GitOps-Policy.docx", "Palisade Learning Log - M3 Kubernetes, GitOps & Policy"),
-    "m4": ("m4", "M4-Platform-Observability.docx", "Palisade Learning Log - M4 Platform & Observability"),
-    "m5": ("m5", "M5-Resilience-Proof.docx", "Palisade Learning Log - M5 Resilience & Proof"),
+    "m0": ("m0", "M0-Foundations.docx", "Palisade Engineering Log - M0 Foundations"),
+    "m1": ("m1", "M1-Inference-Service.docx", "Palisade Engineering Log - M1 Inference Service"),
+    "m2": ("m2", "M2-Supply-Chain-CICD.docx", "Palisade Engineering Log - M2 Supply Chain & CI/CD"),
+    "m3": ("m3", "M3-Kubernetes-GitOps-Policy.docx", "Palisade Engineering Log - M3 Kubernetes, GitOps & Policy"),
+    "m4": ("m4", "M4-Platform-Observability.docx", "Palisade Engineering Log - M4 Platform & Observability"),
+    "m5": ("m5", "M5-Resilience-Proof.docx", "Palisade Engineering Log - M5 Resilience & Proof"),
 }
 
 # The order sections are rendered in. Any missing function is skipped, so a
@@ -70,7 +70,7 @@ def build(key):
     cp.title = footer
     cp.author = "Saim Zaib"
     cp.subject = "Palisade - a secure, self-hosted LLM inference platform"
-    cp.keywords = "DevOps, DevSecOps, Kubernetes, GPU, learning log"
+    cp.keywords = "DevOps, DevSecOps, Kubernetes, GPU, engineering log"
 
     out = os.path.join(OUT_DIR, out_name)
     D.save(out)
