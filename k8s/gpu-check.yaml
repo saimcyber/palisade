@@ -1,0 +1,43 @@
+# M0 acceptance test.
+#
+# Requests one nvidia.com/gpu, which only schedules if the device plugin is
+# advertising the GPU as an allocatable resource. runtimeClassName pins it to
+# the NVIDIA container runtime that k3s registered from the custom node image.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-check
+  labels:
+    app.kubernetes.io/name: gpu-check
+    app.kubernetes.io/part-of: palisade
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gpu-check
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      containers:
+        - name: nvidia-smi
+          image: nvidia/cuda:12.4.1-base-ubuntu22.04
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "=================================================="
+              echo " Palisade M0 - GPU visible from inside Kubernetes"
+              echo "=================================================="
+              nvidia-smi
+              echo ""
+              echo "CUDA devices reported:"
+              nvidia-smi -L
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

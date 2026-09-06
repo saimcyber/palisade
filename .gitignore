@@ -1,0 +1,53 @@
+# --- secrets: never commit anything unencrypted -------------------------------
+*.pem
+*.key
+!**/testdata/*.key
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+age.key
+keys.txt
+
+# --- terraform ----------------------------------------------------------------
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+.terraform.lock.hcl.bak
+
+# --- python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- kubernetes / helm --------------------------------------------------------
+kubeconfig
+kubeconfig.*
+charts/**/charts/
+*.tgz
+
+# --- artefacts ----------------------------------------------------------------
+sbom/
+*.sbom.json
+*.sig
+models/
+*.gguf
+*.safetensors
+
+# --- local --------------------------------------------------------------------
+.DS_Store
+*.log
+tmp/
+scratch/
+NOTES-private.md
