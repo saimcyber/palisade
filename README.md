@@ -30,23 +30,6 @@ make gpu-check  # M0 acceptance: a scheduled pod must see the GPU
 
 `make help` lists everything.
 
-## GPU access
-
-On **WSL2** the NVIDIA device plugin cannot be used: it discovers GPUs through
-NVML, which is unsupported against WSL's `/dev/dxg` driver model. Palisade
-injects the GPU with **CDI** instead, so a pod needs both:
-
-```yaml
-runtimeClassName: nvidia
-metadata:
-  annotations:
-    cdi.k8s.io/gpu: "nvidia.com/gpu=all"
-```
-
-On **native Linux** the device plugin is used as normal, giving real
-scheduler-level GPU accounting. `scripts/cluster-up.sh` branches on the host.
-The full investigation is in [`docs/adr/0002-gpu-in-k3d.md`](docs/adr/0002-gpu-in-k3d.md).
-
 ## Requirements
 
 | Requirement | Notes |
