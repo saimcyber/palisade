@@ -26,7 +26,7 @@ else
 endif
 
 .PHONY: help doctor tools k3s-image up up-lite up-full down nuke \
-        gpu-cdi gpu-check cluster-info kubeconfig test lint fmt clean
+        gpu-cdi gpu-check cluster-info docs-export kubeconfig test lint fmt clean
 
 # --- meta --------------------------------------------------------------------
 
@@ -77,6 +77,11 @@ cluster-info: ## Show nodes, GPU capacity and running pods
 		| awk 'BEGIN{printf "%-24s %s\n","NODE","ALLOCATABLE GPUs"} {printf "%-24s %s\n", $$1, ($$2==""?"0":$$2)}'
 	@echo ""
 	@kubectl --context $(CTX) get pods -A
+
+# --- documentation -----------------------------------------------------------
+
+docs-export: ## Copy the milestone .docx files out to the Windows drive
+	@bash scripts/export-docs.sh
 
 # --- verification ------------------------------------------------------------
 
