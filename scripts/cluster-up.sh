@@ -58,7 +58,7 @@ fi
 # --- node image --------------------------------------------------------------
 if [ "$GPU_OK" = "1" ]; then
   if ! docker image inspect "$K3S_IMAGE" >/dev/null 2>&1; then
-    step "Building the GPU-capable k3s node image (first run only, ~2 min)"
+    step "Building the GPU-capable k3s node image (first run only)"
     bash "$ROOT/scripts/build-k3s-image.sh"
   else
     ok "node image $K3S_IMAGE already built"

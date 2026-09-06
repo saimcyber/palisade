@@ -19,7 +19,7 @@ kubectl --context "$CTX" -n "$NS" delete job "$JOB" --ignore-not-found >/dev/nul
 printf '\n%b==>%b Submitting the GPU check job\n' "$CYA" "$RST"
 kubectl --context "$CTX" -n "$NS" apply -f "$(dirname "${BASH_SOURCE[0]}")/../k8s/gpu-check.yaml" >/dev/null
 
-printf '%b==>%b Waiting for completion (up to 3 min)\n' "$CYA" "$RST"
+printf '%b==>%b Waiting for the job to complete\n' "$CYA" "$RST"
 if kubectl --context "$CTX" -n "$NS" wait --for=condition=complete "job/$JOB" --timeout=180s >/dev/null 2>&1; then
   echo ""
   kubectl --context "$CTX" -n "$NS" logs "job/$JOB"

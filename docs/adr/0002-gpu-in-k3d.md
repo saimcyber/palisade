@@ -1,7 +1,6 @@
 # 2. Getting a GPU into a pod on k3d under WSL2
 
 - **Status:** Accepted
-- **Date:** 2026-09-06
 - **Milestone:** M0
 
 ## Context
@@ -15,7 +14,8 @@ Windows driver -> WSL2 VM -> Docker container (k3d node) -> containerd -> pod
 ```
 
 This was identified in planning as the single dependency that could force an
-architecture change, so it was tackled on day one under a half-day time box.
+architecture change, so it was tackled before anything else was built, with a
+fallback agreed in advance in case it could not be made to work.
 
 ## What actually happened
 

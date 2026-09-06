@@ -77,8 +77,7 @@ def cover(D):
     D.table(
         ["Field", "Detail"],
         [
-            ["Milestone", "**M0 - Foundations** (Day 1 of 20)"],
-            ["Completed", "6-7 September 2026"],
+            ["Milestone", "**M0 - Foundations**"],
             ["Goal", "`make up` produces a local Kubernetes cluster in which a scheduled pod can use the GPU"],
             ["Result", "**Passed.** 28/28 environment checks, verified from a clean teardown and rebuild"],
             ["Hardware", "NVIDIA RTX 3050 Laptop (4 GB VRAM), 16 GB RAM, 12 logical CPUs, Windows 11 + WSL2"],
@@ -503,7 +502,7 @@ E  error starting plugins: ... nvml init failed: Not Supported""", size=8.5)
     D.callout("Lesson 2",
               "**Know the difference between 'misconfigured' and 'impossible'.** Time spent tuning a "
               "component that cannot work in your environment is time wasted. Recognising the second "
-              "category quickly is what kept this inside its half-day budget.", "danger")
+              "category quickly is what stopped this becoming open-ended.", "danger")
 
     D.h2("6.4  The alternative - CDI")
     dual(D,
@@ -577,8 +576,8 @@ def docker_move(D):
     D.table(
         ["Signal", "What it showed", "What it meant"],
         [
-            ["`E:` copy exists, 19.93 GB", "modified 21:55, **not** file-locked", "A stale, orphaned copy"],
-            ["`D:` copy exists, 19.93 GB", "modified 22:04, **file-locked**", "**This is the live one**"],
+            ["`E:` copy exists, 19.93 GB", "**not** file-locked", "A stale, orphaned copy"],
+            ["`D:` copy exists, 19.93 GB", "modified more recently, **file-locked**", "**This is the live one**"],
             ["`CustomWslDistroDir`", "still `D:\\AWS\\Docker\\...`", "Docker never switched over"],
             ["WSL registry `BasePath`", "`\\\\?\\D:\\AWS\\Docker\\...\\main`", "The distro was still on D:"],
         ],
@@ -604,8 +603,8 @@ def docker_move(D):
          "moving files by hand because **WSL updates its own registry entry**; a manual move would leave the "
          "registry pointing at a path that no longer exists."),
         ("Copy - do not move - the data disk",
-         "`robocopy ... /J` (unbuffered I/O, appropriate for very large files). 19.934 GB in 4.8 minutes at "
-         "~74 MB/s. Copying rather than moving leaves the original as a fallback."),
+         "`robocopy ... /J` (unbuffered I/O, appropriate for very large files). 19.934 GB, verified "
+         "byte-for-byte afterwards. Copying rather than moving leaves the original as a fallback."),
         ("Repoint the setting",
          "`CustomWslDistroDir` -> `E:\\WSL\\Docker\\DockerDesktopWSL` in "
          "`%APPDATA%\\Docker\\settings-store.json`, with a backup taken first."),
@@ -730,7 +729,7 @@ def tool_choices(D):
              "non-existent path."],
             ["Copy vs move (20 GB)", "**Copy, verify, then delete**",
              "**`robocopy /MOVE`** - faster and simpler, but leaves no fallback if the new location fails to "
-             "start. The extra 5 minutes bought a guaranteed rollback."],
+             "start. The extra copy step bought a guaranteed rollback."],
             ["Secrets (from M3)", "**SOPS + age**",
              "**HashiCorp Vault** - roughly 1 GB of RAM for capability SOPS already provides, and it sits "
              "outside the GitOps model rather than inside it. **Sealed Secrets** - viable, but SOPS keeps "
@@ -805,7 +804,7 @@ def mistakes(D):
         [
             ["**Pinned tool versions that were stale or fictional.** Helm 3.16 against a current 4.2.4, and "
              "a Trivy version that had never been released - a 404 mid-install.",
-             "One failed install run, ~15 minutes",
+             "One failed install run",
              "Every pin is now confirmed against the upstream release API, and the download URL checked for "
              "HTTP 200, before it is written into the script."],
             ["**Overwrote a file edited in the wrong place.** The README's GPU section was edited directly "
@@ -820,7 +819,7 @@ def mistakes(D):
              "checkpoint; the same mistake an hour earlier would have been expensive."],
             ["**Trusted a GUI operation without verifying it.** The Docker disk move was reported as done "
              "and was not.",
-             "~20 minutes, plus 19.9 GB briefly wasted",
+             "A wasted migration, and 19.9 GB briefly duplicated",
              "Verify state, not the report: check which file the OS has open, and check the registry, rather "
              "than believing a dialog."],
         ],
@@ -842,8 +841,8 @@ def explain(D):
     _qa(D, [
         ("Why test the GPU before writing any code?",
          "Because it was the only part of the design that could force an architecture change. Everything "
-         "else is portable. I sequenced the work by risk and gave it a half-day time box with a documented "
-         "fallback - running vLLM as an external backend outside the cluster."),
+         "else is portable. I sequenced the work by risk and agreed a fallback before starting - running "
+         "vLLM as an external backend outside the cluster - so the milestone could not stall."),
         ("Why can't you use the NVIDIA device plugin?",
          "It discovers GPUs through NVML. Under WSL2 the GPU is exposed as `/dev/dxg`, a paravirtualised "
          "device with the real driver on the Windows side, and NVML does not support that model. It is not a "
@@ -927,7 +926,7 @@ def glossary_and_next(D):
     )
     D.spacer(4)
     D.callout("Where M1 goes",
-              "**M1 - The inference service (Days 2-4).** vLLM serving Qwen2.5-0.5B on the GPU, and the "
+              "**M1 - The inference service.** vLLM serving Qwen2.5-0.5B on the GPU, and the "
               "first version of `palisade-gateway` in FastAPI with an OpenAI-compatible "
               "`/v1/chat/completions` endpoint. Done when you `curl` the gateway and watch tokens stream "
               "back from your own hardware.", "note")

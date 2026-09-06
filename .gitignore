@@ -20,6 +20,7 @@ crash.*.log
 
 # --- python -------------------------------------------------------------------
 __pycache__/
+documentation/_build/.venv/
 *.py[cod]
 .venv/
 venv/

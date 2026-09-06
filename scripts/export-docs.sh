@@ -32,14 +32,26 @@ mkdir -p "$DEST"
 printf '\n%b==>%b Exporting to %s\n' "$CYA" "$RST" "$DEST"
 count=0
 shopt -s nullglob
+locked=0
 for f in "$SRC"/*.docx; do
-  cp -f "$f" "$DEST/"
-  printf '  %bok%b   %s\n' "$GREEN" "$RST" "$(basename "$f")"
-  count=$((count+1))
+  base="$(basename "$f")"
+  # A destination file open in Word is locked by Windows and cannot be
+  # replaced. Report that clearly rather than failing the whole target.
+  if cp -f "$f" "$DEST/" 2>/dev/null; then
+    printf '  %bok%b   %s
+' "$GREEN" "$RST" "$base"
+    count=$((count+1))
+  else
+    printf '  %bskip%b %s - destination is locked (is it open in Word?)
+' "$YEL" "$RST" "$base"
+    locked=$((locked+1))
+  fi
 done
 shopt -u nullglob
 
-if [ "$count" = "0" ]; then
+# Only a genuine absence of source documents is an error. Files skipped
+# because the destination was locked are a warning, not a failure.
+if [ "$count" = "0" ] && [ "${locked:-0}" = "0" ]; then
   printf '  %bnote%b no .docx found in %s - build one first: cd documentation/_build && python build.py m0\n' "$YEL" "$RST" "$SRC"
   exit 1
 fi
@@ -59,7 +71,6 @@ To change a document, edit documentation/_build/m<N>.py and rebuild:
     python build.py m<N>
     cd ~/palisade && make docs-export
 
-Last exported: $(date '+%Y-%m-%d %H:%M')
 EOF
 
 printf "\n  %d document(s) exported.\n\n" "$count"
