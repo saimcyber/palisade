@@ -34,15 +34,18 @@ MILESTONES = {
 # milestone module only has to implement the sections that apply to it.
 SECTION_ORDER = [
     "cover",
-    "what_m0_was_for", "what_it_was_for",
+    "what_it_was_for",
     "starting_point",
     "decisions",
     "what_was_built",
-    "gpu_problem",          # M0-specific deep dive
+    "how_it_was_done",      # the command-level walkthrough
+    "gpu_problem",          # deep dive A (M0)
+    "docker_move",          # deep dive B (M0)
     "deep_dive",            # generic slot for later milestones
     "deviations",
     "tool_choices",
     "limitations",
+    "mistakes",
     "explain",
     "glossary_and_next",
 ]
