@@ -67,7 +67,7 @@ if command -v docker >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then
     pass "docker" "$(docker version --format '{{.Server.Version}}' 2>/dev/null)"
     # GPU passthrough into a container is the single most important check here.
-    if docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 \
+    if docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 \
          nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
       pass "docker --gpus all" "container can see the GPU"
     else
@@ -106,12 +106,30 @@ hdr "Cluster"
 if command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q '^palisade'; then
   pass "k3d cluster" "$(k3d cluster list palisade --no-headers 2>/dev/null)"
   if kubectl --context k3d-palisade get nodes >/dev/null 2>&1; then
-    GPUCAP=$(kubectl --context k3d-palisade get nodes \
-      -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}' 2>/dev/null)
-    if [ -n "$GPUCAP" ] && [ "$GPUCAP" != "0" ]; then
-      pass "nvidia.com/gpu" "${GPUCAP} allocatable in-cluster"
+    if kubectl --context k3d-palisade get runtimeclass nvidia >/dev/null 2>&1; then
+      pass "RuntimeClass nvidia" "present"
     else
-      warn "nvidia.com/gpu" "0 allocatable - device plugin not ready yet"
+      fail "RuntimeClass nvidia" "missing - node image lacks the NVIDIA runtime"
+    fi
+    # On WSL2 the GPU arrives via CDI, not as an allocatable resource.
+    # See docs/adr/0002-gpu-in-k3d.md for why the device plugin cannot work.
+    if grep -qi microsoft /proc/version 2>/dev/null; then
+      if docker exec k3d-palisade-server-0 test -f /etc/cdi/nvidia.yaml 2>/dev/null; then
+        if docker exec k3d-palisade-server-0 grep -q libdxcore.so /etc/cdi/nvidia.yaml 2>/dev/null; then
+          pass "CDI spec" "present, includes libdxcore.so"
+        else
+          fail "CDI spec" "missing libdxcore.so - run: make gpu-cdi"
+        fi
+      else
+        fail "CDI spec" "absent - run: make gpu-cdi"
+      fi
+    else
+      GPUCAP=$(kubectl --context k3d-palisade get nodes -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}' 2>/dev/null)
+      if [ -n "$GPUCAP" ] && [ "$GPUCAP" != "0" ]; then
+        pass "nvidia.com/gpu" "${GPUCAP} allocatable in-cluster"
+      else
+        warn "nvidia.com/gpu" "0 allocatable - device plugin not ready"
+      fi
     fi
   else
     warn "kubectl context" "cluster exists but is not reachable"

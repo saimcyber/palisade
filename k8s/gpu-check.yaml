@@ -1,8 +1,22 @@
-# M0 acceptance test.
+# =============================================================================
+#  M0 acceptance test - the GPU must be usable by a pod the scheduler placed.
 #
-# Requests one nvidia.com/gpu, which only schedules if the device plugin is
-# advertising the GPU as an allocatable resource. runtimeClassName pins it to
-# the NVIDIA container runtime that k3s registered from the custom node image.
+#  Two things are required for the GPU to reach this container:
+#
+#    runtimeClassName: nvidia
+#        routes the container through nvidia-container-runtime instead of plain
+#        runc. k3s creates this RuntimeClass automatically once it detects the
+#        NVIDIA runtime inside the node image.
+#
+#    annotation cdi.k8s.io/gpu
+#        names the CDI device to inject. CDI is used here instead of a
+#        `resources.limits.nvidia.com/gpu` request because the NVIDIA device
+#        plugin cannot run under WSL2 - it discovers GPUs via NVML, which is
+#        unsupported against WSL's /dev/dxg driver model.
+#
+#  The trade-off (no scheduler-level GPU accounting) is deliberate and is
+#  documented in docs/adr/0002-gpu-in-k3d.md.
+# =============================================================================
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,26 +31,42 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: gpu-check
+      annotations:
+        cdi.k8s.io/gpu: "nvidia.com/gpu=all"
     spec:
       restartPolicy: Never
       runtimeClassName: nvidia
       containers:
         - name: nvidia-smi
-          image: nvidia/cuda:12.4.1-base-ubuntu22.04
+          image: nvidia/cuda:12.8.1-base-ubuntu24.04
           command:
             - /bin/bash
             - -c
             - |
-              echo "=================================================="
-              echo " Palisade M0 - GPU visible from inside Kubernetes"
-              echo "=================================================="
+              set -e
+              echo "======================================================"
+              echo " Palisade M0 - GPU reachable from inside Kubernetes"
+              echo "======================================================"
+              echo "pod:  $HOSTNAME"
+              echo "node: ${NODE_NAME:-unknown}"
+              echo ""
               nvidia-smi
               echo ""
-              echo "CUDA devices reported:"
+              echo "--- devices ---"
               nvidia-smi -L
+              echo ""
+              echo "PASS: the scheduler placed this pod and it can drive the GPU."
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
             limits:
-              nvidia.com/gpu: 1
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

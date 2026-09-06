@@ -15,8 +15,8 @@
 #  Build with: make k3s-image
 # =============================================================================
 
-ARG K3S_TAG=v1.31.5-k3s1
-ARG CUDA_TAG=12.4.1-base-ubuntu22.04
+ARG K3S_TAG=v1.36.4-k3s1
+ARG CUDA_TAG=12.8.1-base-ubuntu24.04
 
 FROM rancher/k3s:${K3S_TAG} AS k3s
 FROM nvidia/cuda:${CUDA_TAG}

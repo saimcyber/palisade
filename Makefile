@@ -8,7 +8,7 @@ SHELL := /bin/bash
 
 # --- configuration -----------------------------------------------------------
 CLUSTER    ?= palisade
-K3S_TAG    ?= v1.31.5-k3s1
+K3S_TAG    ?= v1.36.4-k3s1
 K3S_IMAGE  ?= palisade/k3s-nvidia:$(K3S_TAG)
 CTX        := k3d-$(CLUSTER)
 
@@ -26,7 +26,7 @@ else
 endif
 
 .PHONY: help doctor tools k3s-image up up-lite up-full down nuke \
-        gpu-check cluster-info kubeconfig test lint fmt clean
+        gpu-cdi gpu-check cluster-info kubeconfig test lint fmt clean
 
 # --- meta --------------------------------------------------------------------
 
@@ -79,6 +79,9 @@ cluster-info: ## Show nodes, GPU capacity and running pods
 	@kubectl --context $(CTX) get pods -A
 
 # --- verification ------------------------------------------------------------
+
+gpu-cdi: ## (Re)wire the GPU into the running cluster via CDI (WSL2)
+	@bash scripts/setup-gpu-cdi.sh
 
 gpu-check: ## Run a pod that must see the RTX 3050 (M0 acceptance test)
 	@bash scripts/gpu-check.sh

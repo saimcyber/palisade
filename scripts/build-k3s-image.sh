@@ -3,8 +3,8 @@
 # be rebuilt on its own when the k3s or CUDA version is bumped.
 set -euo pipefail
 
-K3S_TAG="${K3S_TAG:-v1.31.5-k3s1}"
-CUDA_TAG="${CUDA_TAG:-12.4.1-base-ubuntu22.04}"
+K3S_TAG="${K3S_TAG:-v1.36.4-k3s1}"
+CUDA_TAG="${CUDA_TAG:-12.8.1-base-ubuntu24.04}"
 IMAGE="${K3S_IMAGE:-palisade/k3s-nvidia:${K3S_TAG}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
