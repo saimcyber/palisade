@@ -529,9 +529,9 @@ def risks(D):
              "Medium",
              "A milestone is not finished until its document exists. That is the definition, not an "
              "aspiration."],
-            ["Losing momentum with no deadline",
+            ["Losing momentum without a schedule",
              "Medium",
-             "The counterweight to having no schedule: every milestone ends in something "
+             "The counterweight to working without one: every milestone ends in something "
              "demonstrable, so progress is always visible and the project is always presentable as "
              "it stands."],
         ],
