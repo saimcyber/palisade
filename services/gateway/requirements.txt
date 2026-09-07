@@ -1,0 +1,8 @@
+# Exactly pinned. M2 adds hash pinning (pip-compile --generate-hashes) and an SBOM
+# (Syft) on top of this - see the project plan's supply-chain milestone.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+httpx==0.28.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+prometheus-client==0.26.0

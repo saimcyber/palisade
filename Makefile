@@ -106,12 +106,12 @@ vllm-logs: ## Tail the in-cluster vLLM pod's logs
 vllm-down: ## Remove the in-cluster vLLM deployment (the HF cache PVC is kept)
 	@kubectl --context k3d-palisade delete -f k8s/vllm.yaml --ignore-not-found
 
-test: ## Run the unit test suite
-	@if [ -d services/gateway/tests ]; then \
-		cd services/gateway && python3 -m pytest -q; \
-	else \
-		echo "no tests yet - added in M1"; \
-	fi
+test: ## Run the unit test suite (no GPU needed - the gateway's tests mock the upstream)
+	@cd services/gateway && \
+	if [ ! -d .venv ]; then python3 -m venv .venv; fi && \
+	.venv/bin/pip install -q --upgrade pip && \
+	.venv/bin/pip install -q -r requirements-dev.txt && \
+	.venv/bin/python -m pytest -q
 
 lint: ## Lint everything that has a linter
 	@pre-commit run --all-files || true

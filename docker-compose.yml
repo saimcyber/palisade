@@ -1,0 +1,52 @@
+# =============================================================================
+#  Local iteration for the gateway.
+#
+#  Default profile: gateway only, pointed at the cluster's vLLM through a
+#  port-forward (`kubectl port-forward svc/vllm 8000:8000`). Fast to start,
+#  no second ~9 GB image pull - see the M1 plan's disk-budget risk row.
+#
+#  `--profile full` additionally runs a second, local vLLM - opt-in, because
+#  that is what costs the extra image and VRAM. Two vLLM processes cannot
+#  both hold the RTX 3050's 4 GB at once (docs/adr/0005), so this profile is
+#  for iterating on the gateway without the cluster running at all, not for
+#  running both at the same time as `make vllm-up`.
+# =============================================================================
+services:
+  gateway:
+    build:
+      context: ./services/gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PALISADE_UPSTREAM_BASE_URL: "http://host.docker.internal:8000"
+      PALISADE_API_KEY_HASHES: "${PALISADE_API_KEY_HASHES:?set a key hash - see services/gateway/README or generate one with hashlib.sha256}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  vllm:
+    image: vllm/vllm-openai:v0.28.0
+    profiles: ["full"]
+    ports:
+      - "8000:8000"
+    shm_size: "2gb"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      # Both settings hard-won in the M1 host-Docker spike - see docs/CONVENTIONS.md.
+      VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
+    command:
+      - --model=Qwen/Qwen3-0.6B
+      - --served-model-name=palisade-small
+      - --max-model-len=4096
+      - --gpu-memory-utilization=0.7
+      - --enforce-eager
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  hf-cache:
