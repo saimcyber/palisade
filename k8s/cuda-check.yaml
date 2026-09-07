@@ -1,0 +1,48 @@
+# =============================================================================
+#  M1 acceptance test (part 1) - a real CUDA kernel must execute through the
+#  CDI path, not just be visible to nvidia-smi.
+#
+#  M0's gpu-check.yaml proves device *visibility*: nvidia-smi only reads the
+#  driver, it never launches a kernel. This job runs docker/cuda-check, which
+#  compiles and executes an actual vectorAdd kernel and verifies the numeric
+#  result. If this fails, the CDI spec is missing something a real workload
+#  needs (see docs/adr/0002-gpu-in-k3d.md and scripts/setup-gpu-cdi.sh) -
+#  the same class of problem as the missing libdxcore.so mount in M0.
+#
+#  Same two requirements as every GPU pod in this cluster:
+#    runtimeClassName: nvidia
+#    annotation cdi.k8s.io/gpu: "nvidia.com/gpu=all"
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cuda-check
+  labels:
+    app.kubernetes.io/name: cuda-check
+    app.kubernetes.io/part-of: palisade
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cuda-check
+      annotations:
+        cdi.k8s.io/gpu: "nvidia.com/gpu=all"
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      containers:
+        - name: cuda-check
+          image: palisade/cuda-check:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

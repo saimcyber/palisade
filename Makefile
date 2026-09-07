@@ -94,6 +94,9 @@ gpu-cdi: ## (Re)wire the GPU into the running cluster via CDI (WSL2)
 gpu-check: ## Run a pod that must see the RTX 3050 (M0 acceptance test)
 	@bash scripts/gpu-check.sh
 
+cuda-check: ## Run a pod that must execute a real CUDA kernel (M1 acceptance test, part 1)
+	@bash scripts/cuda-check.sh
+
 test: ## Run the unit test suite
 	@if [ -d services/gateway/tests ]; then \
 		cd services/gateway && python3 -m pytest -q; \

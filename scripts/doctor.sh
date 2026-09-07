@@ -54,6 +54,26 @@ else
   warn "disk" "${DISK_AVAIL} GB free - vLLM images need ~15 GB"
 fi
 
+# Docker Desktop's data (image/layer store) lives on E: in its own WSL
+# utility VM, not inside this distro - `docker info`'s DockerRootDir points
+# there but is not visible from Ubuntu-24.04, so check the Windows drive
+# directly via the /mnt/e passthrough (see docs/CONVENTIONS.md machine layout). M1
+# pulls one ~20 GB vLLM image by default (compose: gateway only, against the
+# cluster's vLLM) or two (~40 GB total) if `docker compose --profile full` is
+# also used for local iteration.
+if [ -d /mnt/e ]; then
+  E_DISK_AVAIL=$(df -BG --output=avail /mnt/e 2>/dev/null | tail -1 | tr -dc '0-9')
+  if [ "${E_DISK_AVAIL:-0}" -ge 40 ]; then
+    pass "E: free space" "${E_DISK_AVAIL} GB free - room for both vLLM copies"
+  elif [ "${E_DISK_AVAIL:-0}" -ge 20 ]; then
+    warn "E: free space" "${E_DISK_AVAIL} GB free - enough for one vLLM image, not --profile full"
+  else
+    fail "E: free space" "${E_DISK_AVAIL:-0} GB free - below the ~20 GB a single vLLM image needs"
+  fi
+else
+  warn "E: free space" "/mnt/e not mounted - cannot check Docker's data drive"
+fi
+
 # --- GPU ---------------------------------------------------------------------
 hdr "GPU"
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -125,6 +145,12 @@ if command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q '^pa
       if docker exec k3d-palisade-server-0 test -f /etc/cdi/nvidia.yaml 2>/dev/null; then
         if docker exec k3d-palisade-server-0 grep -q libdxcore.so /etc/cdi/nvidia.yaml 2>/dev/null; then
           pass "CDI spec" "present, includes libdxcore.so"
+          # A present spec only means the driver is reachable (nvidia-smi).
+          # It does not prove a CUDA kernel can execute through it - that is
+          # what `make cuda-check` verifies (M1), so this is a pointer, not
+          # a gate doctor.sh runs itself: the image build + Job cost more
+          # than belongs in a routine environment check.
+          warn "CUDA compute" "not checked here - run: make cuda-check"
         else
           fail "CDI spec" "missing libdxcore.so - run: make gpu-cdi"
         fi
