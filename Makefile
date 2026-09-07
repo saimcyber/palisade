@@ -97,6 +97,15 @@ gpu-check: ## Run a pod that must see the RTX 3050 (M0 acceptance test)
 cuda-check: ## Run a pod that must execute a real CUDA kernel (M1 acceptance test, part 1)
 	@bash scripts/cuda-check.sh
 
+vllm-up: ## Deploy vLLM serving Qwen3-0.6B in-cluster (M1 acceptance test, part 2)
+	@bash scripts/vllm-up.sh
+
+vllm-logs: ## Tail the in-cluster vLLM pod's logs
+	@kubectl --context k3d-palisade logs -f -l app.kubernetes.io/name=vllm
+
+vllm-down: ## Remove the in-cluster vLLM deployment (the HF cache PVC is kept)
+	@kubectl --context k3d-palisade delete -f k8s/vllm.yaml --ignore-not-found
+
 test: ## Run the unit test suite
 	@if [ -d services/gateway/tests ]; then \
 		cd services/gateway && python3 -m pytest -q; \
