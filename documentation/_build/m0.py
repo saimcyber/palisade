@@ -2,6 +2,11 @@
 """Content for the M0 engineering document."""
 from docx_kit import *   # noqa: F403
 
+SECTIONS = ["cover", "what_it_was_for", "starting_point", "decisions",
+            "what_was_built", "how_it_was_done", "gpu_problem", "docker_move",
+            "deviations", "tool_choices", "limitations", "mistakes", "explain",
+            "glossary_and_next"]
+
 
 # --- the device used throughout: the same idea said twice ---------------------
 def dual(D, plain, technical):

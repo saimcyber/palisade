@@ -22,6 +22,7 @@ from docx_kit import Doc  # noqa: E402
 
 # milestone key -> (module, output filename, footer label)
 MILESTONES = {
+    "plan": ("plan", "Palisade - Project Plan.docx", "Palisade - Project Plan"),
     "m0": ("m0", "M0-Foundations.docx", "Palisade Engineering Log - M0 Foundations"),
     "m1": ("m1", "M1-Inference-Service.docx", "Palisade Engineering Log - M1 Inference Service"),
     "m2": ("m2", "M2-Supply-Chain-CICD.docx", "Palisade Engineering Log - M2 Supply Chain & CI/CD"),
@@ -53,7 +54,7 @@ SECTION_ORDER = [
 
 def build(key):
     if key not in MILESTONES:
-        raise SystemExit(f"unknown milestone '{key}'. known: {', '.join(MILESTONES)}")
+        raise SystemExit(f"unknown target '{key}'. known: {', '.join(MILESTONES)}")
     mod_name, out_name, footer = MILESTONES[key]
     try:
         mod = importlib.import_module(mod_name)
@@ -62,7 +63,10 @@ def build(key):
 
     D = Doc()
     rendered = []
-    for fn_name in SECTION_ORDER:
+    # A module may declare its own SECTIONS; otherwise fall back to the shared
+    # order. Missing functions are skipped either way.
+    order = getattr(mod, "SECTIONS", SECTION_ORDER)
+    for fn_name in order:
         fn = getattr(mod, fn_name, None)
         if callable(fn):
             fn(D)

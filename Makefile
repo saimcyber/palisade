@@ -26,7 +26,7 @@ else
 endif
 
 .PHONY: help doctor tools k3s-image up up-lite up-full down nuke \
-        gpu-cdi gpu-check cluster-info docs-export kubeconfig test lint fmt clean
+        gpu-cdi gpu-check cluster-info docs-export check-time kubeconfig test lint fmt clean
 
 # --- meta --------------------------------------------------------------------
 
@@ -79,6 +79,9 @@ cluster-info: ## Show nodes, GPU capacity and running pods
 	@kubectl --context $(CTX) get pods -A
 
 # --- documentation -----------------------------------------------------------
+
+check-time: ## Assert no dates or durations have crept into the repo
+	@bash scripts/check-no-time.sh
 
 docs-export: ## Copy the milestone .docx files out to the Windows drive
 	@bash scripts/export-docs.sh
