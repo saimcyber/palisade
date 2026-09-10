@@ -818,7 +818,7 @@ def mistakes(D):
              "One source of truth. Edits go to staging and sync forward, never the reverse - and the result "
              "is verified with `grep` afterwards rather than assumed."],
             ["**Cleared a temporary folder that contained my own working directory.** Reclaiming C: by "
-             "emptying `%LOCALAPPDATA%\\Temp` deleted the scratch working directory that had been kept there.",
+             "emptying `%LOCALAPPDATA%\\Temp` deleted a scratch working directory kept under it.",
              "**Nothing** - everything had already been committed",
              "Recorded in `docs/CONVENTIONS.md`. The reason it cost nothing is the discipline of committing at each "
              "checkpoint; the same mistake an hour earlier would have been expensive."],
