@@ -52,3 +52,13 @@ models/
 tmp/
 scratch/
 NOTES-private.md
+
+# --- local assistant / editor config (never commit) --------------------------
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.claude/
+.cursor/
+.aider*
+.github/copilot-instructions.md

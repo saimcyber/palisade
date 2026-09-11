@@ -4,20 +4,26 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M0 — foundations complete.** The local GPU-capable cluster comes up from a
-> clean teardown and a scheduled pod can drive the GPU. The inference service lands in M1.
+> Status: **M1 — inference service running.** vLLM serves a model inside the
+> local GPU cluster behind an OpenAI-compatible gateway, and the acceptance tests
+> pass. Supply chain and GitOps come next (M2–M3).
 
 ---
 
-## What this is
+## Why I'm building this
 
-A small but complete AI serving platform: an open-source language model running
-on a local GPU, wrapped in the infrastructure an AI company actually needs
-around it — authentication, per-customer spending limits, abuse filtering,
-caching, monitoring, and a delivery pipeline that refuses to ship anything it
-cannot cryptographically verify.
+This is a personal learning project. I'm a Cyber Security undergrad going into
+platform / DevOps engineering, and I wanted one project where I actually build
+the infrastructure an AI company runs *around* a model — not just deploy a
+container. So Palisade is an open-source LLM on a local GPU wrapped in
+authentication, per-customer spending limits, abuse filtering, caching,
+monitoring, and a delivery pipeline that refuses to ship anything it can't
+cryptographically verify.
 
-It is not an AI project. It is the infrastructure that runs *around* the AI.
+I work through it as milestones **M0–M5**, each gated on an acceptance test. The
+[devlog](docs/devlog.md) has the day-to-day notes; [`documentation/`](documentation/)
+has the polished per-milestone write-ups — including the dead ends, because
+those are where the learning is.
 
 ## Quickstart
 
@@ -88,11 +94,11 @@ tests/           unit, integration and k6 load tests
 
 ## Documentation
 
+- [`docs/devlog.md`](docs/devlog.md) — running notes, newest first
 - [`docs/adr/`](docs/adr/) — architecture decision records
-- [`documentation/`](documentation/) — per-milestone write-ups covering what was built,
-  what differed from the plan, the limitations, and why each tool was chosen over its
-  alternatives
+- [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — how I work on this and what I've settled on
+- [`documentation/`](documentation/) — the polished per-milestone write-ups
 
-## Licence
+## License
 
 MIT — see [LICENSE](LICENSE).

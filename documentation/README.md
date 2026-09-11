@@ -1,20 +1,21 @@
 # Documentation
 
-One document per milestone, recording how Palisade was built: what was done, what went
-wrong, what was decided differently from the plan, the limitations of the result, and why
-each tool was chosen over its alternatives.
+One write-up per milestone, recording how I built that part of Palisade: what I
+did, what went wrong, where I deviated from the plan, the limitations of the
+result, and why I picked each tool over its alternatives.
 
-Most project documentation describes the finished state and quietly deletes the route
-taken to get there. These do the opposite — the dead ends and the reasoning are the point.
-Every idea appears twice: once in **plain language**, once **technically**, so the
-documents are readable whether or not you already know Kubernetes.
+Most project docs describe the finished state and quietly delete the route taken
+to get there. I'm doing the opposite here — the dead ends and the reasoning are
+the point, because that's the part I actually learned from. Every idea appears
+twice: once in **plain language**, once **technically**, so it stays followable
+whether or not Kubernetes is already familiar.
 
 ## Milestones
 
 | Milestone | Document | Status |
 | --- | --- | --- |
 | M0 — Foundations | [`M0-Foundations.docx`](M0-Foundations.docx) | Complete |
-| M1 — Inference service | `M1-Inference-Service.docx` | Pending |
+| M1 — Inference service | [`M1-Inference-Service.docx`](M1-Inference-Service.docx) | Complete |
 | M2 — Supply chain & CI/CD | `M2-Supply-Chain-CICD.docx` | Pending |
 | M3 — Kubernetes, GitOps & policy | `M3-Kubernetes-GitOps-Policy.docx` | Pending |
 | M4 — Platform & observability | `M4-Platform-Observability.docx` | Pending |
@@ -36,8 +37,9 @@ documents are readable whether or not you already know Kubernetes.
 
 ## Regenerating
 
-The documents are generated from source so they stay consistent in structure and styling,
-and so a mistake is corrected at the source and rebuilt rather than patched by hand.
+I generate the documents from source so they stay consistent in structure and
+styling, and so I fix a mistake once at the source and rebuild rather than
+hand-patching a Word file.
 
 ```bash
 cd documentation/_build
@@ -48,7 +50,7 @@ python build.py --all            # every milestone with a content module
 
 | File | Role |
 | --- | --- |
-| `docx_kit.py` | Shared styling. Changing it restyles every document at once — which is the point. |
+| `docx_kit.py` | Shared styling. Changing it restyles every document at once. |
 | `build.py` | Milestone → filename mapping and section ordering. |
 | `m0.py`, `m1.py`, … | The content of one milestone each. |
 

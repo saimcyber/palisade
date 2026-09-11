@@ -812,30 +812,28 @@ def mistakes(D):
              "One failed install run",
              "Every pin is now confirmed against the upstream release API, and the download URL checked for "
              "HTTP 200, before it is written into the script."],
-            ["**Overwrote a file edited in the wrong place.** The README's GPU section was edited directly "
-             "in the repository, then silently reverted by the next sync from the staging directory.",
-             "Lost edit, caught by a follow-up check",
-             "One source of truth. Edits go to staging and sync forward, never the reverse - and the result "
-             "is verified with `grep` afterwards rather than assumed."],
-            ["**Cleared a temporary folder that contained my own working directory.** Reclaiming C: by "
-             "emptying `%LOCALAPPDATA%\\Temp` deleted a scratch working directory kept under it.",
-             "**Nothing** - everything had already been committed",
-             "Recorded in `docs/CONVENTIONS.md`. The reason it cost nothing is the discipline of committing at each "
-             "checkpoint; the same mistake an hour earlier would have been expensive."],
-            ["**Trusted a GUI operation without verifying it.** The Docker disk move was reported as done "
-             "and was not.",
+            ["**Edited the wrong copy of a file.** I changed the README's GPU section in one working copy "
+             "while a different checkout was the one being committed, so the edit looked like it had vanished.",
+             "A confusing hour; edit recovered",
+             "Keep one working copy as the source of truth, and `grep` the committed file afterwards to "
+             "confirm the change actually landed."],
+            ["**Cleared a temp folder that had a working checkout under it.** Freeing space on C: by "
+             "emptying `%LOCALAPPDATA%\\Temp` took a scratch checkout with it.",
+             "**Nothing** - everything was committed and pushed",
+             "It only cost nothing because I commit at each checkpoint. Working directories don't live "
+             "under `Temp` any more."],
+            ["**Trusted a GUI operation without verifying it.** Docker reported the disk-location move as "
+             "done; it hadn't happened.",
              "A wasted migration, and 19.9 GB briefly duplicated",
-             "Verify state, not the report: check which file the OS has open, and check the registry, rather "
-             "than believing a dialog."],
+             "Check the state, not the dialog: which file the OS actually has open, and the registry."],
         ],
         widths=[2.55, 1.35, 2.7],
     )
     D.callout("The pattern across all four",
-              "Every one is a variant of the same mistake: **believing a report instead of checking the "
-              "state.** A version string that was never verified, a sync assumed to be one-directional, a "
-              "folder assumed to be disposable, a migration assumed to have run. The habit worth building "
-              "is cheap and specific - after any operation that claims success, ask what observable fact "
-              "would be true if it really had.", "ok")
+              "Every one is a variant of the same mistake: **trusting a report instead of checking the "
+              "state.** A version string I never verified, the wrong file open, a folder I assumed was "
+              "disposable, a migration I assumed had run. The habit worth building is cheap and specific - "
+              "after anything that claims success, ask what observable fact would be true if it really had.", "ok")
 
 
 # =============================================================================
