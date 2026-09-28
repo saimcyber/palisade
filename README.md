@@ -4,9 +4,12 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M1 — inference service running.** vLLM serves a model inside the
-> local GPU cluster behind an OpenAI-compatible gateway, and the acceptance tests
-> pass. Supply chain and GitOps come next (M2–M3).
+> Status: **M2 — the pipeline signs what it ships.** A GitHub Actions pipeline
+> lints, tests, builds, gates on Trivy (HIGH/CRITICAL), pushes to GHCR, and
+> signs + attests an SBOM through keyless cosign - no AWS credential lives in
+> GitHub anywhere; a separate Terraform pipeline plans on PRs and applies on
+> merge through the same OIDC identity. GitOps and policy enforcement come
+> next (M3).
 
 ---
 
