@@ -4,15 +4,17 @@
 #  Builder stage installs dependencies into a venv; runtime stage copies only
 #  the venv and the app source - no compiler toolchain, no pip cache, no
 #  build-time files ship. Non-root throughout. Base pinned by digest, not
-#  just tag - M2 adds Trivy/Syft/cosign on top of this image.
+#  just tag. requirements.txt is hash-pinned (pip-compile --generate-hashes);
+#  --require-hashes makes this build refuse any package whose hash doesn't
+#  match, which is the actual enforcement, not just documentation of intent.
+#  Trivy/Syft/cosign run against the image this Dockerfile produces, in CI.
 # =============================================================================
 FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS builder
 
 WORKDIR /build
 COPY requirements.txt .
 RUN python -m venv /venv \
-    && /venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /venv/bin/pip install --no-cache-dir -r requirements.txt
+    && /venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
 
 FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS runtime
 
