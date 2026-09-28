@@ -90,6 +90,32 @@ URI`. The "Unknown vLLM environment variable" warnings for `VLLM_SERVICE_HOST` e
 earlier were the same collision - mostly harmless noise, except for this one. Fix:
 `enableServiceLinks: false` on the pod spec, which stops the injection entirely.
 
+## Supply chain (M2)
+
+GitHub now issues **immutable OIDC subject claims** for repos created after
+2026-07-15 - `repo:owner@owner_id/repo@repo_id:...` instead of the old
+`repo:owner/repo:...`. My first trust policy used the old format and got a
+flat `AssumeRoleWithWebIdentity` denial with no useful error; CloudTrail
+showed the real claim GitHub was sending. Worth checking
+`gh api repos/<owner>/<repo>/actions/oidc/customization/sub` before writing
+any GitHub-to-AWS trust policy now.
+
+A Terraform `aws_s3_bucket` resource wants `s3:Get*`/`s3:List*`, not the
+handful of Get actions I thought I needed - it reads back accelerate,
+logging, CORS, replication, and half a dozen other sub-configurations on
+every apply, whether or not I ever touch them. Also learned the hard way
+that a CI role needs access to its own *state* bucket separately from
+whatever infrastructure bucket it's managing - the backend itself is a
+dependency of every plan and apply, not something "read the infra" already
+covers.
+
+`gitleaks` pre-v8.30 crashes on GitHub's Go-1.24 runners (`panic: wasm
+error: invalid table access`, a real upstream wazero bug, not something in
+my config) - bumped the pin. And a brand-new GHCR package's first `cosign
+sign` right after its first push can fail with a permission error that a
+plain re-run clears - seems to be a propagation delay, not a settings
+problem, since the package was already correctly linked and public.
+
 ## Layout
 
 ```
