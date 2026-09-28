@@ -9,14 +9,14 @@
 #  match, which is the actual enforcement, not just documentation of intent.
 #  Trivy/Syft/cosign run against the image this Dockerfile produces, in CI.
 # =============================================================================
-FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS builder
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS builder
 
 WORKDIR /build
 COPY requirements.txt .
 RUN python -m venv /venv \
     && /venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
 
-FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS runtime
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS runtime
 
 RUN groupadd --system palisade && useradd --system --gid palisade --no-create-home palisade
 
