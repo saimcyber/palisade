@@ -94,14 +94,17 @@ data "aws_iam_policy_document" "app_bucket_plan" {
   statement {
     sid    = "ReadOnlyOnAppBucket"
     effect = "Allow"
+    # Get*/List* (plural, wildcard) rather than an enumerated list: modern
+    # versions of the aws_s3_bucket resource read back a long tail of
+    # sub-configurations during refresh (accelerate, logging, CORS,
+    # replication, object-lock, request-payment, ownership controls...)
+    # regardless of whether this config manages them - found the hard way,
+    # one 403 at a time (GetAccelerateConfiguration first), against a real
+    # apply. Get*/List* are inherently read-only AWS action families; every
+    # mutating action stays individually enumerated below/in ManageAppBucket.
     actions = [
-      "s3:GetBucket*",
-      "s3:ListBucket",
-      "s3:GetObject",
-      "s3:GetEncryptionConfiguration",
-      "s3:GetBucketPolicy",
-      "s3:GetBucketPublicAccessBlock",
-      "s3:GetBucketVersioning",
+      "s3:Get*",
+      "s3:List*",
     ]
     resources = [
       "arn:aws:s3:::${var.app_bucket_name}",
@@ -117,17 +120,13 @@ data "aws_iam_policy_document" "app_bucket_apply" {
     actions = [
       "s3:CreateBucket",
       "s3:DeleteBucket",
-      "s3:GetBucket*",
-      "s3:ListBucket",
+      "s3:Get*",
+      "s3:List*",
       "s3:PutBucketVersioning",
       "s3:PutEncryptionConfiguration",
-      "s3:GetEncryptionConfiguration",
       "s3:PutBucketPublicAccessBlock",
-      "s3:GetBucketPublicAccessBlock",
       "s3:PutBucketPolicy",
-      "s3:GetBucketPolicy",
       "s3:PutObject",
-      "s3:GetObject",
       "s3:DeleteObject",
     ]
     resources = [
