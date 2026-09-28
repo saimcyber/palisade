@@ -106,12 +106,11 @@ vllm-down: ## Remove the in-cluster vLLM deployment (the HF cache PVC is kept)
 test: ## Run the unit test suite (no GPU needed - the gateway's tests mock the upstream)
 	@cd services/gateway && \
 	if [ ! -d .venv ]; then python3 -m venv .venv; fi && \
-	.venv/bin/pip install -q --upgrade pip && \
-	.venv/bin/pip install -q -r requirements-dev.txt && \
+	.venv/bin/pip install -q --require-hashes -r requirements-dev.txt && \
 	.venv/bin/python -m pytest -q
 
-lint: ## Lint everything that has a linter
-	@pre-commit run --all-files || true
+lint: ## Lint everything that has a linter - exits non-zero on a finding, this is a gate
+	@pre-commit run --all-files
 
 fmt: ## Format code in place
 	@pre-commit run --all-files --hook-stage manual || true

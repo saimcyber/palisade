@@ -1,0 +1,28 @@
+# Reviewed, accepted-risk findings only - per docs/adr/0010, HIGH/CRITICAL
+# with no upstream fix yet get a justified entry here, not a loosened gate.
+# Re-evaluate whenever this file is touched: if Debian has since shipped a
+# fix, remove the entry and let a rebuild resolve it instead.
+#
+# All eight are base-OS packages inherited from python:3.12-slim - none are
+# in a code path the gateway application (FastAPI/uvicorn/httpx, running as
+# a non-root user with no mount/cgroup capabilities) ever exercises.
+
+# ncurses: buffer overflow in a terminal UI library never linked by the app
+CVE-2025-69720
+
+# systemd-homed: local privesc via home-dir daemon; homed never runs here
+CVE-2026-16742
+
+# libacl: symlink-traversal privesc via ACL functions; unused, non-root
+CVE-2026-54369
+
+# util-linux: four related CVEs needing mount/nsenter/CAP_SYS_ADMIN, which
+# this container has none of (no mounts performed, no elevated caps)
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
+
+# perl-Archive-Tar: DoS via crafted tar; perl is a base-image package the
+# Python application never invokes. Debian status is fix_deferred.
+CVE-2026-9538
