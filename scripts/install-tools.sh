@@ -17,7 +17,7 @@ set -euo pipefail
 KUBECTL_VERSION="v1.36.4"        # matches the k3s minor we run
 HELM_VERSION="v4.2.4"
 K3D_VERSION="v5.9.0"
-TERRAFORM_VERSION="1.16.1"
+TERRAFORM_VERSION="1.16.4"
 K6_VERSION="v2.2.0"
 COSIGN_VERSION="v3.1.3"
 SYFT_VERSION="v1.51.1"
