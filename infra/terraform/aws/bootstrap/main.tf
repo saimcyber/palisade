@@ -42,7 +42,7 @@ data "aws_iam_policy_document" "ci_plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:pull_request"]
+      values   = ["repo:${var.github_oidc_subject_prefix}:pull_request"]
     }
   }
 }
@@ -66,7 +66,7 @@ data "aws_iam_policy_document" "ci_apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_oidc_subject_prefix}:ref:refs/heads/main"]
     }
   }
 }
