@@ -42,7 +42,7 @@ data "aws_iam_policy_document" "ci_plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:pull_request"]
+      values   = ["repo:${var.github_oidc_subject_prefix}:pull_request"]
     }
   }
 }
@@ -66,7 +66,7 @@ data "aws_iam_policy_document" "ci_apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_oidc_subject_prefix}:ref:refs/heads/main"]
     }
   }
 }
@@ -147,6 +147,57 @@ resource "aws_iam_role_policy" "ci_apply_app_bucket" {
   name   = "app-bucket-manage"
   role   = aws_iam_role.ci_apply.id
   policy = data.aws_iam_policy_document.app_bucket_apply.json
+}
+
+# --- state-bucket access for the aws/app root's own backend ------------------
+#
+# Missing on the first version of this file - caught by actually running
+# terraform init in CI, not by review: `plan` failed with a 403 on
+# HeadObject against app/terraform.tfstate, because ci_plan/ci_apply's only
+# policies scoped them to the *app* bucket (the infrastructure they manage),
+# never the *state* bucket (the backend they run against). Both directions
+# of a plan/apply distinction only make sense for the infrastructure being
+# managed - reading and locking the state itself is a mechanical requirement
+# for either operation, so both roles get the same access here, scoped to
+# only the "app/" key prefix - never "bootstrap/", which is this role's own
+# governing state and stays off-limits to any CI identity.
+data "aws_iam_policy_document" "state_bucket_backend" {
+  statement {
+    sid    = "ListStateBucketAppPrefix"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+    ]
+    resources = ["arn:aws:s3:::${var.state_bucket_name}"]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["app/*"]
+    }
+  }
+
+  statement {
+    sid    = "ReadWriteStateAndLockObjects"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["arn:aws:s3:::${var.state_bucket_name}/app/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ci_plan_state_backend" {
+  name   = "state-bucket-app-prefix"
+  role   = aws_iam_role.ci_plan.id
+  policy = data.aws_iam_policy_document.state_bucket_backend.json
+}
+
+resource "aws_iam_role_policy" "ci_apply_state_backend" {
+  name   = "state-bucket-app-prefix"
+  role   = aws_iam_role.ci_apply.id
+  policy = data.aws_iam_policy_document.state_bucket_backend.json
 }
 
 # --- Terraform state bucket --------------------------------------------------

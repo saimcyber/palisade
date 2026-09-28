@@ -1,0 +1,10 @@
+# Source for requirements.txt. Compile with:
+#   pip-compile --generate-hashes --allow-unsafe -o requirements.txt requirements.in
+# --require-hashes then makes `pip install` refuse anything not listed here
+# with a matching hash - see the Dockerfile.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+httpx==0.28.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+prometheus-client==0.26.0
