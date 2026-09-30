@@ -12,6 +12,7 @@ on:
     branches: [main]
     paths:
       - "deploy/model-manifests/*.json"
+      - "!deploy/model-manifests/*.sigstore.json"
       - ".github/workflows/model-manifest.yml"
 
 permissions:
@@ -29,13 +30,20 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       # One self-contained bundle per manifest (signature + cert + Rekor
-      # entry) - simpler for the init container to verify offline than
-      # separate .sig/.pem files, and it's what M3's Kyverno-adjacent
-      # verify-blob check reads.
+      # entry) - simpler for the model-verify Job to verify offline than
+      # separate .sig/.pem files. The case/continue guard matters: a plain
+      # `*.json` glob also matches the *.sigstore.json bundles this same
+      # loop just wrote, which - on a second run - would sign the
+      # signature bundle itself and produce a nonsensical
+      # *.sigstore.sigstore.json. Found for real, not anticipated: the
+      # first run of this workflow did exactly that.
       - name: sign each manifest
         run: |
           set -euo pipefail
           for f in deploy/model-manifests/*.json; do
+            case "$f" in
+              *.sigstore.json) continue ;;
+            esac
             bundle="${f%.json}.sigstore.json"
             echo "signing $f -> $bundle"
             cosign sign-blob --yes --bundle "$bundle" "$f"
