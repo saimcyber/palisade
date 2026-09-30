@@ -19,6 +19,16 @@ on:
       - "deploy/model-manifests/**"
       - ".github/workflows/model-verify-image.yml"
 
+# Queue, don't run in parallel: two rapid pushes (e.g. this workflow's own
+# rebase-triggered runs) building the "same" source concurrently produced
+# two different image digests - Docker builds aren't perfectly
+# reproducible - and each pushed :latest, so whichever finished last won,
+# silently orphaning the other's bump-digest PR. Found for real, not
+# anticipated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
