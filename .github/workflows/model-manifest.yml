@@ -1,0 +1,55 @@
+# Signs every model-integrity manifest under deploy/model-manifests/ with
+# the same keyless cosign identity the gateway image is signed with (ADR
+# 0008), then commits the resulting signature bundle back to the repo.
+#
+# Separate from ci.yml on purpose: this triggers on a manifest changing
+# (rare - the served model is a deliberate, reviewed decision, not
+# something that updates on every push), not on gateway code changes.
+name: model-manifest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/model-manifests/*.json"
+      - ".github/workflows/model-manifest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commits the signature bundle back
+      id-token: write # cosign's OIDC exchange with Fulcio/Rekor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # One self-contained bundle per manifest (signature + cert + Rekor
+      # entry) - simpler for the init container to verify offline than
+      # separate .sig/.pem files, and it's what M3's Kyverno-adjacent
+      # verify-blob check reads.
+      - name: sign each manifest
+        run: |
+          set -euo pipefail
+          for f in deploy/model-manifests/*.json; do
+            bundle="${f%.json}.sigstore.json"
+            echo "signing $f -> $bundle"
+            cosign sign-blob --yes --bundle "$bundle" "$f"
+          done
+
+      - name: commit the signature bundle
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/model-manifests/*.sigstore.json
+          if git diff --cached --quiet; then
+            echo "no signature changes to commit"
+          else
+            git commit -m "model-manifest: sign $(git diff --cached --name-only | tr '\n' ' ')"
+            git push
+          fi
