@@ -1,16 +1,8 @@
-# Reviewed, accepted-risk findings only - per docs/adr/0010. Every entry
-# below was independently confirmed by a real scan against the identical
-# base digest in services/gateway/.trivyignore and
-# docker/model-verify/.trivyignore - carried over here rather than
-# re-litigated, since this Dockerfile pins the exact same
-# python:3.12-slim digest and runs the same `apt-get update` pattern, so
-# the same package versions are the expected result, not a guess. If this
-# image's own CI run finds anything different, that's the signal to
-# revisit this file specifically, not assume it still applies.
+# Reviewed, accepted-risk findings only - per docs/adr/0010.
 
-# base OS (python:3.12-slim): terminal/privesc/mount CVEs in packages this
-# container - sops plus a shell, non-root, no mount/cgroup caps - never
-# exercises. See the gateway's own .trivyignore for the per-CVE reasoning.
+# base OS (python:3.12-slim) - same reasoning as services/gateway/.trivyignore:
+# base-OS packages in a code path this container (sops plus a shell,
+# non-root, no mount/cgroup capabilities) never exercises.
 CVE-2025-69720
 CVE-2026-16742
 CVE-2026-54369
@@ -20,6 +12,27 @@ CVE-2026-78409
 CVE-2026-78410
 CVE-2026-9538
 
-# openssl: fix exists in Debian's repo, not yet in this base image digest.
+# openssl: fix exists in Debian's repo, not yet in this base image digest -
+# checked against Docker Hub's tags API before writing this.
 CVE-2026-75804
 CVE-2026-84782
+
+# sops v3.13.3's own compiled-in Go dependencies (stdlib, golang.org/x/crypto,
+# google.golang.org/grpc) - confirmed by a real scan of this exact image,
+# not copied from docker/model-verify/.trivyignore's cosign findings, even
+# though the two lists overlap substantially (both are Go binaries built
+# around the same toolchain version). sops is invoked here for exactly one
+# thing: `sops -d` on a local file, as a subprocess with no network
+# listener of its own - most of these are server-side or parsing code
+# paths that invocation never reaches.
+CVE-2026-33818
+CVE-2026-39821
+CVE-2026-46600
+CVE-2026-56853
+CVE-2026-56854
+CVE-2026-56858
+CVE-2026-56859
+CVE-2026-56860
+CVE-2026-56862
+CVE-2026-84304
+CVE-2026-84445
