@@ -1,0 +1,60 @@
+namespace: palisade
+
+gateway:
+  image:
+    repository: ghcr.io/saimcyber/palisade-gateway
+    # Pinned by digest, never a tag - Kyverno rejects :latest outright
+    # (ADR 0013), and a digest is the only reference cosign's verifyImages
+    # can meaningfully check against a signature made for one exact build.
+    # Bumped automatically by ci.yml's bump-digest job - GATEWAY_DIGEST is
+    # its anchor, don't remove it even though it renders as a no-op comment.
+    digest: sha256:89c4c74d2d054c61a72372c2530b539ea931994fb5eaeb638c56bed268533fea # GATEWAY_DIGEST
+  replicas: 1
+  port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  ingress:
+    enabled: true
+    className: traefik
+    host: palisade.local
+  env:
+    servedModelName: palisade-small
+    maxTokensCeiling: 512
+    logLevel: INFO
+  # The one real secret this chart needs (auth.py never sees a raw key,
+  # only accepted hashes - ADR 0015 covers how this gets to the cluster
+  # without ever being a plaintext value in git).
+  apiKeyHashesSecretName: palisade-gateway-secret
+
+vllm:
+  image:
+    repository: vllm/vllm-openai
+    tag: v0.28.0
+  model: Qwen/Qwen3-0.6B
+  servedModelName: palisade-small
+  maxModelLen: 4096
+  gpuMemoryUtilization: 0.6
+  kvCacheMemoryBytes: 512M
+  hfCache:
+    storageClassName: local-path
+    size: 10Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+    limits:
+      memory: 8Gi
+  modelVerify:
+    image:
+      # Built, scanned, signed and pushed by its own workflow -
+      # .github/workflows/model-verify-image.yml - separate from ci.yml
+      # since it rebuilds on a manifest change too, not just its own code.
+      # Bumped automatically by that workflow's bump-digest job.
+      repository: ghcr.io/saimcyber/palisade-model-verify
+      digest: "" # MODEL_VERIFY_DIGEST
+    manifest: qwen3-0.6b

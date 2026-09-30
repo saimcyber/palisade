@@ -1,0 +1,26 @@
+# The one Application applied by hand (`kubectl apply -f
+# deploy/argocd/root-app.yaml`), after Argo CD itself exists
+# (infra/terraform/cluster/). Everything after this is git: it points at
+# deploy/argocd/apps/, and every Application Argo CD finds there - added,
+# changed or removed - is exactly what gets synced. This is the actual
+# mechanism behind "a push to Git deploys itself" (M3's acceptance
+# criterion).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/saimcyber/palisade.git
+    targetRevision: main
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

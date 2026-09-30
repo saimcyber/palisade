@@ -1,0 +1,45 @@
+# Ingress deliberately unrestricted by source (the ingress controller's
+# exact namespace/labels vary by how it's installed, and constraining
+# north-south traffic isn't what this milestone's NetworkPolicies are
+# claiming to do - see ADR 0014). Egress is the real claim: DNS (needed to
+# resolve "vllm" as a Service name at all under default-deny), vLLM on its
+# one port, and Redis on its one port - inert today (no Redis exists until
+# M4), takes effect the moment it does, no policy change needed then.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway
+  namespace: palisade
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: palisade-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vllm
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379

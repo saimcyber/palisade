@@ -1,0 +1,105 @@
+# Every hard-won M1 setting (docs/CONVENTIONS.md, ADR 0002, 0005) carries
+# over unchanged - templated, not re-derived.
+#
+# Model verification is deliberately NOT an initContainer here - see
+# templates/model-verify-job.yaml and ADR 0012 for why: NetworkPolicy
+# can't distinguish one container's egress needs from another's within the
+# same pod, and the verifier needs real internet egress (Hugging Face,
+# Sigstore) that vLLM's own container must never have. Splitting them into
+# separate pods is what lets both be simultaneously true: the verify Job
+# gets a permissive NetworkPolicy scoped to its own short life, this
+# Deployment's pod gets the zero-egress policy the plan's acceptance
+# criterion actually asks for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: vllm
+  annotations:
+    # Waits for the model-verify Job (wave 0) to complete first - weights
+    # guaranteed present and verified before this ever starts.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  # One GPU, one replica - docs/adr/0005-no-autoscaling-on-the-model-tier.md.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        {{- include "palisade.labels" . | nindent 8 }}
+      annotations:
+        cdi.k8s.io/gpu: "nvidia.com/gpu=all"
+    spec:
+      runtimeClassName: nvidia
+      # A Service named after its own app collides with vLLM's own
+      # VLLM_PORT env var - the M1 finding this fix exists for.
+      enableServiceLinks: false
+      containers:
+        - name: vllm
+          image: "{{ .Values.vllm.image.repository }}:{{ .Values.vllm.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model={{ .Values.vllm.model }}
+            - --served-model-name={{ .Values.vllm.servedModelName }}
+            - --max-model-len={{ .Values.vllm.maxModelLen }}
+            - --gpu-memory-utilization={{ .Values.vllm.gpuMemoryUtilization }}
+            - --kv-cache-memory-bytes={{ .Values.vllm.kvCacheMemoryBytes }}
+            - --enforce-eager
+          env:
+            - name: VLLM_WSL2_ENABLE_PIN_MEMORY
+              value: "1"
+            - name: HF_HOME
+              value: /hf-cache
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /hf-cache
+            - name: shm
+              mountPath: /dev/shm
+          resources:
+            {{- toYaml .Values.vllm.resources | nindent 12 }}
+          # Model load (weight load + KV-cache profiling) takes far longer
+          # than any liveness probe would tolerate - without this the
+          # kubelet kills the container mid-load and it never finishes
+          # starting. The PreSync Job (model-verify-job.yaml) already
+          # guarantees the weights are downloaded and correct on the
+          # shared PVC before Argo CD even applies this Deployment, so
+          # this container's own startup is engine init only, not a
+          # first-time download - the generous budget just covers a
+          # genuinely slow node, not a network fetch.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: vllm-hf-cache
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi

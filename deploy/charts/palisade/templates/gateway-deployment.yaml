@@ -1,0 +1,75 @@
+# Every field under securityContext here is also a Kyverno rule (ADR 0013)
+# - written to already satisfy the policy that will admit it, not written
+# loosely and patched later once something gets rejected.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: palisade-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: palisade-gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: palisade-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: palisade-gateway
+        {{- include "palisade.labels" . | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: "{{ .Values.gateway.image.repository }}@{{ .Values.gateway.image.digest }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.gateway.port }}
+          envFrom:
+            - configMapRef:
+                name: palisade-gateway-config
+                prefix: PALISADE_
+            # Secret's own key must be named API_KEY_HASHES (becomes
+            # PALISADE_API_KEY_HASHES via the same prefix) - see the
+            # example in ADR 0015.
+            - secretRef:
+                name: {{ .Values.gateway.apiKeyHashesSecretName }}
+                prefix: PALISADE_
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}

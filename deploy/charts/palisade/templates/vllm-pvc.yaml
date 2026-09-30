@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-hf-cache
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: vllm
+  annotations:
+    # Must exist and be Bound before the model-verify Job (wave 0) tries to
+    # mount it - see model-verify-job.yaml and ADR 0012.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  storageClassName: {{ .Values.vllm.hfCache.storageClassName }}
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.vllm.hfCache.size }}

@@ -1,0 +1,79 @@
+# Scoped to the palisade namespace only (not cluster-wide) - kube-system,
+# traefik and Argo CD's own components are outside this project's control
+# and aren't what this milestone is making a claim about. See ADR 0013 for
+# whether vLLM's own upstream image needed an exclusion from any of these
+# four rules, decided from an actual deploy attempt, not assumed in
+# advance.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: palisade-pod-security-baseline
+  annotations:
+    policies.kyverno.io/title: Palisade pod security baseline
+    policies.kyverno.io/description: >-
+      Every pod in the palisade namespace runs as non-root, with every
+      Linux capability dropped, a read-only root filesystem, and explicit
+      resource limits on every container.
+spec:
+  rules:
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      validate:
+        failureAction: Enforce
+        message: "Pods must set securityContext.runAsNonRoot: true."
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+
+    - name: require-drop-all-capabilities
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      validate:
+        failureAction: Enforce
+        message: "Every container must drop the ALL Linux capability."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
+
+    - name: require-readonly-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      validate:
+        failureAction: Enforce
+        message: "Every container must set readOnlyRootFilesystem: true."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+
+    - name: require-resource-limits
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      validate:
+        failureAction: Enforce
+        message: "Every container must declare CPU and memory limits."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
