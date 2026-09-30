@@ -20,6 +20,14 @@ on:
       - "services/gateway/**"
       - ".github/workflows/ci.yml"
 
+# Queue, don't run in parallel - see model-verify-image.yml's comment on
+# this same block for why: two concurrent runs building "the same" source
+# can produce two different image digests, and whichever push lands last
+# silently wins.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 

@@ -6,6 +6,10 @@ repos:
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+        # cosign's own output - CI writes it without a trailing newline
+        # every time, and this hook "fixing" it every subsequent commit
+        # was pure noise, not a real formatting problem to fix locally.
+        exclude: ^deploy/model-manifests/.*\.sigstore\.json$
       - id: check-yaml
         args: [--allow-multiple-documents]
         exclude: ^deploy/charts/.*/templates/
