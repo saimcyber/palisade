@@ -9,6 +9,7 @@
 !*.tfvars.example
 age.key
 keys.txt
+deploy/secrets/*.plaintext.yaml
 
 # --- terraform ----------------------------------------------------------------
 **/.terraform/*

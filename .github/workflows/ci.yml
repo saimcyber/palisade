@@ -134,3 +134,39 @@ jobs:
           cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
           cosign attest --yes --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
+
+  # "git is the only route to production" (M3's own goal) only holds if the
+  # pipeline that signs a new image also proposes the chart change to
+  # deploy it - a human editing values.yaml by hand after every push would
+  # just be CI/CD with extra steps. Opens a PR rather than pushing directly
+  # to main, matching the project plan's own architecture diagram.
+  bump-digest:
+    needs: build-scan-sign-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: bump the gateway digest in values.yaml
+        run: |
+          set -euo pipefail
+          sed -i "s|digest: sha256:[a-f0-9]\{64\} # GATEWAY_DIGEST|digest: ${{ needs.build-scan-sign-push.outputs.digest }} # GATEWAY_DIGEST|" \
+            deploy/charts/palisade/values.yaml
+          if git diff --quiet deploy/charts/palisade/values.yaml; then
+            echo "no change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "bump/gateway-digest-${{ github.run_id }}"
+          git add deploy/charts/palisade/values.yaml
+          git commit -m "chart: bump gateway digest to ${{ needs.build-scan-sign-push.outputs.digest }}"
+          git push -u origin "bump/gateway-digest-${{ github.run_id }}"
+          gh pr create --title "Bump gateway digest" \
+            --body "Automated - the signed image this points at just changed." \
+            --base main --head "bump/gateway-digest-${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

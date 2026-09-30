@@ -1,0 +1,25 @@
+# The literal acceptance criterion: "no egress whatsoever from vLLM."
+# `policyTypes` deliberately lists only Ingress - Egress is left to
+# default-deny-all's empty rule, so there is no `egress:` block here to
+# ever accidentally grow one. Model verification needed real egress
+# (Hugging Face, Sigstore) - that's exactly why it runs as its own Job in
+# its own pod (ADR 0012), never inside this one.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vllm-ingress-from-gateway-only
+  namespace: palisade
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: palisade-gateway
+      ports:
+        - protocol: TCP
+          port: 8000

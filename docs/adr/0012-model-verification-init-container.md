@@ -1,4 +1,4 @@
-# 12. Model weights are verified by a signed manifest, not trusted on download
+# 12. Model weights are verified by a signed manifest, in their own pod
 
 - **Status:** Accepted
 
@@ -19,8 +19,8 @@ human reviewed and accepted this specific file."
 
 ## Decision
 
-**Two independent checks, both required, run by an initContainer before
-vLLM's own container ever starts:**
+**Two independent checks, both required, run by a separate verification
+step before vLLM's own container ever starts:**
 
 1. **A manifest of expected file hashes is generated once, by hand**
    (`scripts/generate-model-manifest.py`), reading real hashes from Hugging
@@ -33,16 +33,33 @@ vLLM's own container ever starts:**
    identity every other signed artefact in this project uses (ADR 0008).
    The signature bundle is committed back to the repo alongside the
    manifest.
-3. **The init container verifies the signature first, the hashes second.**
+3. **The verification step checks the signature first, the hashes second.**
    `cosign verify-blob` against the manifest has to pass before a single
-   byte of its contents is trusted; only then does the container download
-   the model (via `huggingface_hub.snapshot_download` - literally the same
-   call vLLM's own engine makes internally, so the cache it produces is
-   exactly what vLLM expects to find already there) and hash every file
-   against the now-trusted manifest. Any mismatch, or a missing signature
-   bundle, exits non-zero - which is sufficient on its own to stop the pod,
-   since Kubernetes runs `initContainers` in order and never starts the
-   main container until every one of them has exited 0.
+   byte of its contents is trusted; only then does it download the model
+   (via `huggingface_hub.snapshot_download` - literally the same call
+   vLLM's own engine makes internally, so the cache it produces is exactly
+   what vLLM expects to find already there) and hash every file against
+   the now-trusted manifest. Any mismatch, or a missing signature bundle,
+   exits non-zero.
+
+**Run as a separate, single-shot `Job` (`model-verify-job.yaml`), not a
+vLLM `initContainer` - a design that changed once NetworkPolicy came into
+the picture (ADR 0014).** An initContainer was the first thing tried; it
+doesn't work, because NetworkPolicy applies at the pod level and can't
+grant one container in a pod internet egress while denying it to another
+container in the *same* pod. The verifier genuinely needs to reach Hugging
+Face and Sigstore's Rekor; vLLM's own container must never reach anything
+(the plan's own acceptance criterion: "no egress whatsoever from vLLM").
+Those two requirements are only both satisfiable by putting the verifier
+in its own pod, with its own NetworkPolicy. It runs as an Argo CD `Sync`
+hook (`hook-delete-policy: BeforeHookCreation`, so it's re-run and
+re-verified on every sync, never silently reused stale) at `sync-wave: 0`
+- after the shared PVC (`wave: -1`, has to be `Bound` before anything can
+mount it) and before vLLM's Deployment (`wave: 1`, which Argo CD won't
+apply until this Job has exited 0). The result is the same guarantee an
+initContainer would have given - vLLM's container never starts against
+unverified weights - achieved without ever needing vLLM's own pod to carry
+network access it should never have.
 
 ## Consequences
 

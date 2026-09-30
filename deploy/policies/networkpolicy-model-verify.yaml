@@ -1,0 +1,29 @@
+# The verifier's whole reason for existing as a separate pod (ADR 0012):
+# it genuinely needs internet egress - Hugging Face to download weights,
+# Sigstore's Rekor to check the manifest's transparency-log entry. Exact
+# destination IP ranges aren't pinned (both are CDN-backed and rotate);
+# scoped instead by what it's for - DNS plus HTTPS - and by how long it
+# lives: this Job runs once per sync and exits, not an always-on service
+# with a standing network posture to reason about.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-model-verify-egress
+  namespace: palisade
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: model-verify
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443

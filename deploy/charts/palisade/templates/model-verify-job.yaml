@@ -1,0 +1,61 @@
+# Deliberately its own Job, not a vLLM initContainer - see ADR 0012 and
+# the comment at the top of vllm-deployment.yaml. As an Argo CD `Sync`
+# hook it runs as part of the sync itself (not before it, which would
+# deadlock against the PVC below never having been created yet on a first
+# deploy), deleted and recreated on every sync
+# (hook-delete-policy: BeforeHookCreation) so a manifest or image change
+# always re-verifies rather than silently reusing a stale Job.
+#
+# sync-wave "0": after the PVC (wave -1, must be Bound to mount), before
+# vLLM's own Deployment (wave 1, which needs this to have exited 0 first).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-verify
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: model-verify
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-verify
+        {{- include "palisade.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: model-verify
+          image: "{{ .Values.vllm.modelVerify.image.repository }}@{{ .Values.vllm.modelVerify.image.digest }}"
+          env:
+            - name: HF_HOME
+              value: /hf-cache
+            - name: MODEL_MANIFEST
+              value: {{ .Values.vllm.modelVerify.manifest }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /hf-cache
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: vllm-hf-cache

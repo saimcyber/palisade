@@ -1,0 +1,17 @@
+# Non-secret settings only - config.py's env_prefix is PALISADE_, so every
+# key here becomes PALISADE_<KEY> in the container. The one real secret
+# (PALISADE_API_KEY_HASHES) comes from {{ .Values.gateway.apiKeyHashesSecretName }}
+# instead - see ADR 0015.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: palisade-gateway-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: palisade-gateway
+data:
+  UPSTREAM_BASE_URL: "http://vllm:8000"
+  SERVED_MODEL_NAME: {{ .Values.gateway.env.servedModelName | quote }}
+  MAX_TOKENS_CEILING: {{ .Values.gateway.env.maxTokensCeiling | quote }}
+  LOG_LEVEL: {{ .Values.gateway.env.logLevel | quote }}

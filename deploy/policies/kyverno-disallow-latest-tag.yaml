@@ -1,0 +1,40 @@
+# Cluster-wide, not scoped to the palisade namespace - a floating tag
+# undermines the entire point of a supply chain that signs one exact
+# digest (ADR 0007, 0008), and there's no legitimate reason for it
+# anywhere this project controls.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow latest tag
+    policies.kyverno.io/description: >-
+      Every container image must name an explicit tag or digest - never
+      ':latest' and never an implicit (missing) tag, which defaults to
+      'latest' the same way.
+spec:
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      validate:
+        failureAction: Enforce
+        message: "An explicit image tag or digest is required."
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      validate:
+        failureAction: Enforce
+        message: "Using the mutable ':latest' tag is not allowed."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

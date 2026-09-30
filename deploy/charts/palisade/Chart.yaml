@@ -1,0 +1,6 @@
+apiVersion: v2
+name: palisade
+description: The gateway and vLLM, as one GitOps-managed release (ADR 0011)
+type: application
+version: 0.1.0
+appVersion: "m3"

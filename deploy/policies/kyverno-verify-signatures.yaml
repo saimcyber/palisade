@@ -1,0 +1,52 @@
+# M3's acceptance criterion, half of it: an unsigned image is refused by
+# the cluster with a readable reason. Scoped to ghcr.io/saimcyber/* only -
+# vLLM's own upstream image (vllm/vllm-openai) is never expected to carry
+# this project's signature, and shouldn't be required to.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-palisade-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Palisade image signatures
+    policies.kyverno.io/description: >-
+      Every ghcr.io/saimcyber/* image must carry a valid keyless cosign
+      signature from this repository's own GitHub Actions identity
+      (ADR 0008) before the cluster will run it.
+spec:
+  webhookConfiguration:
+    timeoutSeconds: 30
+  rules:
+    - name: verify-gateway-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/saimcyber/palisade-gateway*"
+          failureAction: Enforce
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/saimcyber/palisade/.github/workflows/ci.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+    - name: verify-model-verify-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["palisade"]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/saimcyber/palisade-model-verify*"
+          failureAction: Enforce
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/saimcyber/palisade/.github/workflows/model-verify-image.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev

@@ -1,0 +1,15 @@
+# The baseline every other NetworkPolicy in deploy/policies/ carves an
+# exception out of. Empty ingress/egress + an empty podSelector (matches
+# every pod in the namespace) is Kubernetes NetworkPolicy's idiom for
+# "deny everything by default" - nothing here is allowed except what a
+# more specific policy explicitly permits. See ADR 0014.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: palisade
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

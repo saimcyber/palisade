@@ -1,0 +1,21 @@
+# Plain directory sync, no Helm/Kustomize - these are static, reviewed
+# policy documents (ADR 0013, 0014), not something that needs templating.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: palisade-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/saimcyber/palisade.git
+    targetRevision: main
+    path: deploy/policies
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

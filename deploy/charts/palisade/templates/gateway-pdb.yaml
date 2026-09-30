@@ -1,0 +1,19 @@
+# maxUnavailable: 1 at replicas: 1 is a genuine no-op today (evicting the
+# one pod leaves 1 unavailable, which is <= the 1 allowed) - deliberately,
+# since blocking voluntary eviction of a single replica (maxUnavailable: 0)
+# would make ordinary node maintenance hang rather than fail cleanly. It
+# starts actually protecting availability the moment the gateway
+# (stateless, unlike vLLM - ADR 0005) is scaled past one replica, with no
+# template change needed to get there.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: palisade-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: palisade-gateway

@@ -1,0 +1,57 @@
+# Argo CD, with one addition to the stock chart: a sidecar Config
+# Management Plugin on repo-server that runs `sops -d` on anything named
+# *.enc.yaml before Argo CD ever sees its contents. See ADR 0015 - the
+# only piece this doesn't provide is the age private key itself, which
+# scripts/setup-sops-age.sh provisions separately, by hand, once.
+configs:
+  cmp:
+    create: true
+    plugins:
+      sops-decrypt:
+        generate:
+          command: ["sh", "-c"]
+          args:
+            - >-
+              find . -name '*.enc.yaml' -exec sops -d {} \; ;
+              find . -not -name '*.enc.yaml' -name '*.yaml' -exec cat {} \;
+        discover:
+          find:
+            glob: "**/*.enc.yaml"
+
+repoServer:
+  extraContainers:
+    - name: sops-decrypt
+      command: ["/var/run/argocd/argocd-cmp-server"]
+      image: alpine/sops:latest
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: SOPS_AGE_KEY_FILE
+          value: /sops-age/key.txt
+      volumeMounts:
+        - mountPath: /var/run/argocd
+          name: var-files
+        - mountPath: /home/argocd/cmp-server/plugins
+          name: plugins
+        - mountPath: /tmp
+          name: sops-tmp
+        - mountPath: /sops-age
+          name: sops-age
+          readOnly: true
+  volumes:
+    - name: sops-tmp
+      emptyDir: {}
+    - name: sops-age
+      secret:
+        # Provisioned by scripts/setup-sops-age.sh, never by Terraform or
+        # Argo CD itself - the one deliberate manual step in this chain.
+        secretName: sops-age
+
+# self-heal + automated pruning is set on each Application resource
+# (deploy/argocd/), not here - this file is only the Argo CD installation
+# itself.

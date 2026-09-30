@@ -1,0 +1,9 @@
+# A dedicated namespace, not "default" - lets every Kyverno policy and both
+# NetworkPolicies (ADR 0013, 0014) scope to exactly this application's pods
+# without also constraining kube-system, traefik or Argo CD itself.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
