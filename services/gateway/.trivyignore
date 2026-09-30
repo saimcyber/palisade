@@ -26,3 +26,12 @@ CVE-2026-78410
 # perl-Archive-Tar: DoS via crafted tar; perl is a base-image package the
 # Python application never invokes. Debian status is fix_deferred.
 CVE-2026-9538
+
+# openssl: a fix exists in Debian's own package repo (3.5.7-1~deb13u3) but
+# the python:3.12-slim base image had not yet been rebuilt against it as
+# of the digest pinned in the Dockerfile - checked directly against Docker
+# Hub's tags API before writing this, not assumed. DoS via QUIC flow
+# control / DTLS retransmission info disclosure - the gateway makes no
+# QUIC or DTLS connections of any kind (httpx over plain HTTP/1.1 to vLLM).
+CVE-2026-75804
+CVE-2026-84782
