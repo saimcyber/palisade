@@ -1,0 +1,3 @@
+# Reviewed, accepted-risk findings only - per docs/adr/0010. Empty until a
+# real scan finds something with no upstream fix; entries get added the
+# same way services/gateway/.trivyignore's were, never pre-emptively.

@@ -1,10 +1,13 @@
 # =============================================================================
-#  Model-verification init container.
+#  Model-verification Job image.
 #
-#  Runs before vLLM's own container starts (Kubernetes runs initContainers
-#  in order and only proceeds once each exits 0). Refuses to let the main
-#  container start if the model weights on the shared cache volume don't
-#  match a manifest this project committed and signed itself.
+#  Runs as its own Argo CD Sync-hook Job (deploy/charts/palisade/templates/
+#  model-verify-job.yaml), ordered by sync-wave to complete before vLLM's
+#  own Deployment is ever applied - not a vLLM initContainer, because
+#  NetworkPolicy can't grant this container egress while denying it to
+#  vLLM's in the same pod (ADR 0012, 0014). Refuses to exit 0 if the model
+#  weights on the shared cache volume don't match a manifest this project
+#  committed and signed itself.
 #
 #  Build context is the REPO ROOT, not this directory - the image bakes in
 #  deploy/model-manifests/*.json (+.sigstore.json) so the thing being

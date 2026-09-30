@@ -1,0 +1,7 @@
+# SOPS config - which files get encrypted to which age recipient.
+# The matching private key is never committed (ADR 0015) - it lives only
+# on an operator's machine and, once provisioned, as a Kubernetes Secret
+# in the argocd namespace that only the repo-server's SOPS plugin reads.
+creation_rules:
+  - path_regex: deploy/secrets/.*\.enc\.yaml$
+    age: age182ep8d0hyvnwfj3nhzv64xrdvm4fwpudc0wvvkxncqygzzpxkeks4mldng
