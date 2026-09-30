@@ -27,7 +27,7 @@ repoServer:
       # bump-digest job. No credible official sops container image exists
       # to depend on instead (checked; see docker/sops-cmp/Dockerfile's own
       # header for what was ruled out and why).
-      image: ghcr.io/saimcyber/palisade-sops-cmp@sha256:0000000000000000000000000000000000000000000000000000000000000000 # SOPS_CMP_DIGEST
+      image: ghcr.io/saimcyber/palisade-sops-cmp@sha256:6c340bb8ccc31fe0d8846e7a56b76c3a17294b162e4b3a1fb3b578ba295e4a70 # SOPS_CMP_DIGEST
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
