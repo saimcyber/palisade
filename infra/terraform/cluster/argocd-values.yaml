@@ -22,7 +22,12 @@ repoServer:
   extraContainers:
     - name: sops-decrypt
       command: ["/var/run/argocd/argocd-cmp-server"]
-      image: alpine/sops:latest
+      # Built, scanned, signed and pushed by its own workflow -
+      # .github/workflows/sops-cmp-image.yml - bumped automatically by its
+      # bump-digest job. No credible official sops container image exists
+      # to depend on instead (checked; see docker/sops-cmp/Dockerfile's own
+      # header for what was ruled out and why).
+      image: ghcr.io/saimcyber/palisade-sops-cmp@sha256:0000000000000000000000000000000000000000000000000000000000000000 # SOPS_CMP_DIGEST
       securityContext:
         runAsNonRoot: true
         runAsUser: 999

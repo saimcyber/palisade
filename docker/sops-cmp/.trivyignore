@@ -1,0 +1,25 @@
+# Reviewed, accepted-risk findings only - per docs/adr/0010. Every entry
+# below was independently confirmed by a real scan against the identical
+# base digest in services/gateway/.trivyignore and
+# docker/model-verify/.trivyignore - carried over here rather than
+# re-litigated, since this Dockerfile pins the exact same
+# python:3.12-slim digest and runs the same `apt-get update` pattern, so
+# the same package versions are the expected result, not a guess. If this
+# image's own CI run finds anything different, that's the signal to
+# revisit this file specifically, not assume it still applies.
+
+# base OS (python:3.12-slim): terminal/privesc/mount CVEs in packages this
+# container - sops plus a shell, non-root, no mount/cgroup caps - never
+# exercises. See the gateway's own .trivyignore for the per-CVE reasoning.
+CVE-2025-69720
+CVE-2026-16742
+CVE-2026-54369
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
+CVE-2026-9538
+
+# openssl: fix exists in Debian's repo, not yet in this base image digest.
+CVE-2026-75804
+CVE-2026-84782
