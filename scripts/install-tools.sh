@@ -23,6 +23,7 @@ COSIGN_VERSION="v3.1.3"
 SYFT_VERSION="v1.51.1"
 TRIVY_VERSION="0.74.0"
 SOPS_VERSION="v3.13.3"
+AGE_VERSION="v1.3.2"
 YQ_VERSION="v4.53.6"
 ARGOCD_VERSION="v3.5.2"
 KUSTOMIZE_VERSION="v5.8.1"
@@ -112,6 +113,14 @@ if needs sops "$SOPS_VERSION" sops --version; then
   curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64" -o "$TMP/sops"
   sudo install -m 0755 "$TMP/sops" "$BIN/sops"; report sops "$SOPS_VERSION"
 else skip "sops ${SOPS_VERSION#v}"; fi
+
+# --- age (used from M3 onwards - encrypts what sops commits) -----------------
+if needs age "$AGE_VERSION" age --version; then
+  curl -fsSL "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz" | tar -xz -C "$TMP"
+  sudo install -m 0755 "$TMP/age/age" "$BIN/age"
+  sudo install -m 0755 "$TMP/age/age-keygen" "$BIN/age-keygen"
+  report age "$AGE_VERSION"
+else skip "age ${AGE_VERSION#v}"; fi
 
 # --- yq ----------------------------------------------------------------------
 if needs yq "$YQ_VERSION" yq --version; then

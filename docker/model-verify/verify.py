@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Model-verification init container entrypoint.
+"""Model-verification Job entrypoint (deploy/charts/palisade/templates/model-verify-job.yaml).
 
 Two checks, in order, either of which refusing to pass means this process
-exits non-zero - which is the whole mechanism: Kubernetes runs
-initContainers in sequence and only starts the main container once every
-init container has exited 0.
+exits non-zero - which is the whole mechanism: this runs as its own Argo
+CD Sync-hook Job, ordered by sync-wave to complete before vLLM's own
+Deployment is ever applied (ADR 0012). Not a vLLM initContainer - that was
+the first design, and it doesn't work: NetworkPolicy applies at the pod
+level and can't grant this verifier internet egress while denying it to
+vLLM's own container in the same pod (ADR 0014).
 
   1. The manifest's own signature verifies (cosign verify-blob, keyless,
      against this project's own GitHub Actions identity). Nothing in the

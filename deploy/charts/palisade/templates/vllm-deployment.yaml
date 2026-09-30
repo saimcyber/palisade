@@ -71,12 +71,12 @@ spec:
           # Model load (weight load + KV-cache profiling) takes far longer
           # than any liveness probe would tolerate - without this the
           # kubelet kills the container mid-load and it never finishes
-          # starting. The PreSync Job (model-verify-job.yaml) already
-          # guarantees the weights are downloaded and correct on the
-          # shared PVC before Argo CD even applies this Deployment, so
-          # this container's own startup is engine init only, not a
-          # first-time download - the generous budget just covers a
-          # genuinely slow node, not a network fetch.
+          # starting. The model-verify Sync-hook Job (model-verify-job.yaml,
+          # sync-wave 0) already guarantees the weights are downloaded and
+          # correct on the shared PVC before this Deployment (sync-wave 1)
+          # is ever applied, so this container's own startup is engine
+          # init only, not a first-time download - the generous budget
+          # just covers a genuinely slow node, not a network fetch.
           startupProbe:
             httpGet:
               path: /health
