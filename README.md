@@ -4,12 +4,14 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M2 — the pipeline signs what it ships.** A GitHub Actions pipeline
-> lints, tests, builds, gates on Trivy (HIGH/CRITICAL), pushes to GHCR, and
-> signs + attests an SBOM through keyless cosign - no AWS credential lives in
-> GitHub anywhere; a separate Terraform pipeline plans on PRs and applies on
-> merge through the same OIDC identity. GitOps and policy enforcement come
-> next (M3).
+> Status: **M3 — the cluster enforces the rules itself.** Argo CD deploys from
+> git (a push is the deployment; hand edits are reverted), and Kyverno refuses
+> any `ghcr.io/saimcyber/*` image not signed by this repo's own CI identity —
+> [recorded refusal](docs/evidence/m3/03-unsigned-image-refused.txt). Every pod
+> runs non-root on a read-only filesystem, the model server has no network
+> egress at all, model weights are checked against a signed SHA-256 manifest
+> before vLLM starts, and the one secret is SOPS/age-encrypted in git. Next: M4,
+> multi-tenancy and observability.
 
 ---
 
@@ -35,9 +37,19 @@ make tools      # install the pinned toolchain (idempotent)
 make doctor     # verify the environment, including GPU passthrough
 make up         # create the local k3d cluster with GPU support
 make gpu-check  # acceptance: a scheduled pod must see the GPU
+make gitops     # age key, Argo CD + Kyverno, root app; waits until all Synced
 ```
 
+After `make gitops`, the only way to change what runs is to push to `main`.
 `make help` lists everything.
+
+> **Reproducing this from a fork:** the gateway's Secret is encrypted to *my*
+> age key, which is never committed. On a fresh machine `make gitops` generates
+> a new key; add its public key to `.sops.yaml` and re-encrypt
+> `deploy/secrets/gateway-secret.enc.yaml` (with your own API-key hash) before
+> `palisade-secrets` can sync. Point the Argo CD Applications at your fork, and
+> re-sign images from your own CI identity, or Kyverno will — correctly — refuse
+> them.
 
 ## GPU access
 
@@ -65,7 +77,7 @@ that was the entire problem — is in
 | Linux or WSL2 | Developed on WSL2 / Ubuntu 24.04 |
 | Docker | With GPU passthrough (`docker run --gpus all`) |
 | NVIDIA GPU | Developed against an RTX 3050 Laptop, 4 GB VRAM |
-| ~25 GB disk | Node image, CUDA base images, model weights |
+| ~50 GB disk | The vLLM image alone unpacks to ~26 GB inside the node; plus node/CUDA images and weights |
 | 16 GB RAM | The WSL2 VM is capped at 10 GB — see `.wslconfig` |
 
 ## Cluster profiles
@@ -74,8 +86,8 @@ The whole Linux VM is capped at 10 GB of RAM, so the stack is split:
 
 | Target | Contents |
 | --- | --- |
-| `make up-lite` | Cluster + GPU support + the application |
-| `make up-full` | Adds Argo CD and the observability stack |
+| `make up-lite` | Cluster + GPU support (the application arrives via `make gitops`) |
+| `make up-full` | Reserved for M4's observability stack — today identical to `up-lite` |
 
 Turning off what you are not currently working on is a deliberate operational
 choice on constrained hardware, not a shortcut.

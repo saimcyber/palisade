@@ -57,7 +57,7 @@ up: up-lite ## Alias for up-lite
 up-lite: ## Create the cluster + GPU support (fits comfortably in 16GB)
 	@PROFILE=lite bash scripts/cluster-up.sh
 
-up-full: ## Create the cluster + Argo CD + observability (heavier)
+up-full: ## Reserved for M4 observability (today identical to up-lite)
 	@PROFILE=full bash scripts/cluster-up.sh
 
 check-time: ## Fail if a tracked file has a calendar date or schedule wording (project rule)
