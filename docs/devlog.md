@@ -6,7 +6,7 @@ Palisade. Newest entries at the top. The polished per-milestone write-ups live i
 
 ---
 
-## 2026-09-08 — M1 done: an OpenAI-compatible gateway in front of vLLM
+## M1 done: an OpenAI-compatible gateway in front of vLLM
 
 Got vLLM serving Qwen3-0.6B *inside* the k3d cluster (not just in host Docker),
 put a small FastAPI gateway in front of it, and made `make gpu-check` +
@@ -30,7 +30,7 @@ Three bugs cost me most of the time, and all three were worth learning:
 Notes are in `docs/CONVENTIONS.md`; the full write-up is
 `documentation/M1-Inference-Service.docx`.
 
-## 2026-09-07 — reframed the plan around milestones
+## reframed the plan around milestones
 
 Rewrote the project plan so it's organised purely by milestone goal +
 acceptance test, instead of by any kind of schedule. This is a side project
@@ -38,7 +38,7 @@ around a degree; I'd rather gate each milestone on "the test passes" than
 pretend I know how long anything takes. Also fixed every shellcheck finding and
 turned on the pre-commit hooks (gitleaks, detect-private-key, yaml/json checks).
 
-## 2026-09-06 — M0: a GPU-capable k3d cluster on WSL2
+## M0: a GPU-capable k3d cluster on WSL2
 
 First real milestone. The hard part was GPU access: the NVIDIA device plugin
 can't work under WSL2 because it goes through NVML, which isn't supported

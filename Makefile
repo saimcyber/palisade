@@ -25,7 +25,7 @@ else
   R :=
 endif
 
-.PHONY: help doctor tools k3s-image up up-lite up-full down nuke gitops \
+.PHONY: help doctor tools k3s-image up up-lite up-full down nuke gitops check-time \
         gpu-cdi gpu-check cluster-info docs-export kubeconfig test lint fmt clean
 
 # --- meta --------------------------------------------------------------------
@@ -59,6 +59,12 @@ up-lite: ## Create the cluster + GPU support (fits comfortably in 16GB)
 
 up-full: ## Create the cluster + Argo CD + observability (heavier)
 	@PROFILE=full bash scripts/cluster-up.sh
+
+check-time: ## Fail if a tracked file has a calendar date or schedule wording (project rule)
+	@! git grep -n -I -E '\b20[0-9]{2}-[01][0-9]-[0-3][0-9]\b|\b(Day|Days|Week|Weeks) [0-9]|\b[0-9]+ (working )?(days|weeks)\b|\bCompleted on\b' \
+	  -- ':!*.lock' ':!*.lock.hcl' ':!*.sigstore.json' ':!documentation/*.docx' ':!documentation/_build/verify_*.py' \
+	  || { echo "time references found (see CLAUDE.md: NO TIME REFERENCES)"; exit 1; }
+	@echo "check-time: clean"
 
 gitops: ## Bootstrap age key + Argo CD + Kyverno + root app, wait until all Synced (M3)
 	@bash scripts/gitops-up.sh
