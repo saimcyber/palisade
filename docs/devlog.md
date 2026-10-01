@@ -6,6 +6,36 @@ Palisade. Newest entries at the top. The polished per-milestone write-ups live i
 
 ---
 
+## M3 done: the cluster enforces the rules itself
+
+Argo CD now deploys everything from git (app-of-apps: policies, then secrets,
+then workloads), and Kyverno refuses any of my images that my own CI didn't sign.
+The recorded refusal is in `docs/evidence/m3/`.
+
+What broke, roughly in order:
+
+- Kyverno rejected images `cosign verify` was happy with. Four wrong fixes
+  before I decoded the stored certificate and found an empty intermediate chain.
+  The real fix was `type: SigstoreBundle` in the policy (ADR 0018).
+- Pods were admitted and then never started: `runAsNonRoot` can't be checked
+  against a user *name*. Numeric `runAsUser` in the chart (ADR 0019).
+- vLLM had no security context at all. Hardened rather than exempted:
+  non-root, read-only, offline, zero egress.
+- A sync-wave deadlock (gateway readiness waits on vLLM, vLLM's wave waited on
+  the gateway), a hook Job that could hang forever, and two fields the API
+  server silently dropped. Argo CD said "Synced" through some of these, so
+  `kubectl diff` became my main check.
+- `make gitops` makes the bootstrap reproducible. A clean rebuild passes, with
+  every policy created before the first workload pod (ADR 0020).
+
+## M2 done: the pipeline signs what it ships
+
+GitHub Actions builds, scans (Trivy gate), pushes and keylessly signs the
+gateway with an SBOM attestation. AWS access is OIDC-only, with separate plan
+and apply roles. The big gotcha: GitHub's OIDC subject claim uses the new
+immutable `owner@id/repo@id` format for newer repos, and the old format fails
+with a bare `AccessDenied`. Details in `documentation/M2-Supply-Chain-CICD.docx`.
+
 ## M1 done: an OpenAI-compatible gateway in front of vLLM
 
 Got vLLM serving Qwen3-0.6B *inside* the k3d cluster (not just in host Docker),

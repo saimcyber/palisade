@@ -3,7 +3,8 @@
 #  Palisade - create the local k3d cluster
 #
 #  PROFILE=lite  cluster + GPU support only          (default, ~2 GB)
-#  PROFILE=full  adds Argo CD + observability later  (~5 GB)
+#  PROFILE=full  reserved for M4 observability (today same as lite); Argo CD
+#                and Kyverno come from `make gitops`, not from a profile
 #
 #  The profile split exists because the whole WSL2 VM is capped at 10 GB, and
 #  the observability stack plus Argo CD will not co-exist comfortably with a
