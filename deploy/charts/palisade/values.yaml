@@ -56,5 +56,5 @@ vllm:
       # since it rebuilds on a manifest change too, not just its own code.
       # Bumped automatically by that workflow's bump-digest job.
       repository: ghcr.io/saimcyber/palisade-model-verify
-      digest: "sha256:d46470119c03de16bdf4cb4ce76d1ac77e9342f49051df330061570d0cbeba65" # MODEL_VERIFY_DIGEST
+      digest: "sha256:8c83963329eecdbbb9c9f88b0291ac0580ba8cabc6d5975c6fc243fa04563c00" # MODEL_VERIFY_DIGEST
     manifest: qwen3-0.6b
