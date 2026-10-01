@@ -92,8 +92,8 @@ earlier were the same collision - mostly harmless noise, except for this one. Fi
 
 ## Supply chain (M2)
 
-GitHub now issues **immutable OIDC subject claims** for repos created after
-2026-07-15 - `repo:owner@owner_id/repo@repo_id:...` instead of the old
+GitHub now issues **immutable OIDC subject claims** for newer repos
+- `repo:owner@owner_id/repo@repo_id:...` instead of the old
 `repo:owner/repo:...`. My first trust policy used the old format and got a
 flat `AssumeRoleWithWebIdentity` denial with no useful error; CloudTrail
 showed the real claim GitHub was sending. Worth checking
