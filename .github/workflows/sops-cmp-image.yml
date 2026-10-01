@@ -83,12 +83,12 @@ jobs:
         with:
           cosign-release: "v3.1.3"
 
-      # --new-bundle-format=false only - see ci.yml's comment on the same
-      # flag and ADR 0018.
+      # --new-bundle-format=false --use-signing-config=false: see ci.yml's
+      # comment on the same flags and ADR 0018.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          cosign sign --yes --new-bundle-format=false "${IMAGE}@${{ steps.push.outputs.digest }}"
-          cosign attest --yes --new-bundle-format=false --type spdxjson --predicate sbom.spdx.json \
+          cosign sign --yes --new-bundle-format=false --use-signing-config=false "${IMAGE}@${{ steps.push.outputs.digest }}"
+          cosign attest --yes --new-bundle-format=false --use-signing-config=false --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
 
   bump-digest:
