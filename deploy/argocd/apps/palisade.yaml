@@ -3,6 +3,10 @@ kind: Application
 metadata:
   name: palisade
   namespace: argocd
+  annotations:
+    # Last: only once policies (wave -1) and secrets (wave 0) report
+    # Healthy - see the Application health check in argocd-values.yaml.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
   source:

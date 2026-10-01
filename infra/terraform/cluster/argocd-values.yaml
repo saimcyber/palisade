@@ -22,6 +22,24 @@ configs:
         hs.message = "Waiting for status.phase"
       end
       return hs
+    # App-of-apps ordering (ADR 0020). The root app gives palisade-policies
+    # sync-wave -1 and the workloads wave 1, so on a fresh cluster the
+    # Kyverno policies exist before any workload pod is admitted. But Argo CD
+    # (since 1.8) reports a child Application as Healthy the instant it
+    # exists, so waves between Applications would order *creation* only, not
+    # wait for the child's sync. This restores the documented health check:
+    # a child Application is only as healthy as it reports itself.
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil and obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+      return hs
   cmp:
     create: true
     plugins:
