@@ -27,7 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Pinned explicitly: the installer's own default (v3.0.6 as of this
+      # action SHA) predates --registry-referrers-mode (see ci.yml/ADR 0018)
+      # - keeping every workflow on the one cosign version this project has
+      # actually verified avoids a repeat of that gap, even here where
+      # sign-blob itself doesn't use the flag.
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: "v3.1.3"
 
       # One self-contained bundle per manifest (signature + cert + Rekor
       # entry) - simpler for the model-verify Job to verify offline than
