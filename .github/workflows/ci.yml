@@ -143,15 +143,20 @@ jobs:
       # before assuming it still applied here). The signing identity is the
       # job's own OIDC token - see docs/adr/0008.
       #
-      # --new-bundle-format=false --use-signing-config=false: forces the
-      # pre-OCI-1.1 sha256-<digest>.sig / .att tag layout, which is what
-      # Kyverno's verifyImages attestor reads - see ADR 0018. Deprecated
-      # (cosign warns they'll be removed), accepted deliberately: the
-      # alternative is a signature this cluster's own policy can't find.
+      # --new-bundle-format=false: forces the pre-OCI-1.1
+      # sha256-<digest>.sig / .att tag layout, which is what Kyverno's
+      # verifyImages attestor reads - see ADR 0018. Deliberately NOT
+      # paired with --use-signing-config=false: that flag switches which
+      # Fulcio/Rekor/TSA URLs get used (TUF-provided vs cosign's own
+      # hardcoded defaults), and doing so issued the signing cert from a
+      # CA Kyverno's own trust material doesn't recognize - caught live
+      # ("x509: certificate signed by unknown authority") even though
+      # cosign's own CLI verify trusted it fine. --new-bundle-format alone
+      # only changes the OCI storage layout, not which CA signs.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          cosign sign --yes --new-bundle-format=false --use-signing-config=false "${IMAGE}@${{ steps.push.outputs.digest }}"
-          cosign attest --yes --new-bundle-format=false --use-signing-config=false --type spdxjson --predicate sbom.spdx.json \
+          cosign sign --yes --new-bundle-format=false "${IMAGE}@${{ steps.push.outputs.digest }}"
+          cosign attest --yes --new-bundle-format=false --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
 
   # "git is the only route to production" (M3's own goal) only holds if the
