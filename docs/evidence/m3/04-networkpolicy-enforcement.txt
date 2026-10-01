@@ -1,0 +1,30 @@
+# NetworkPolicy enforcement - default-deny, gateway->vLLM only, NO egress from vLLM
+# Each probe is a raw TCP connect (5 s timeout) from inside the named pod.
+
+## Policies in force
+NAME                                   POD-SELECTOR                              AGE
+allow-gateway                          app.kubernetes.io/name=palisade-gateway   6h36m
+allow-model-verify-egress              app.kubernetes.io/name=model-verify       6h36m
+allow-vllm-ingress-from-gateway-only   app.kubernetes.io/name=vllm               6h36m
+default-deny-all                       <none>                                    6h36m
+
+## vLLM egress - must all be BLOCKED
+vllm -> 1.1.1.1:443 (raw IP, rules out DNS as the cause):  BLOCKED - ConnectionRefusedError [Errno 111] Connection refused
+vllm -> 140.82.112.3:443 (github.com IP):                  BLOCKED - ConnectionRefusedError [Errno 111] Connection refused
+vllm -> kube-dns 10.43.0.10:53 (even DNS is denied):       BLOCKED - ConnectionRefusedError [Errno 111] Connection refused
+vllm -> huggingface.co:443 (name lookup itself fails):      BLOCKED - gaierror [Errno -3] Temporary failure in name resolution
+
+## Positive controls - the network itself works where policy allows it
+gateway -> vllm:8000 (allowed: gateway egress + vLLM ingress): CONNECTED
+gateway -> 1.1.1.1:443 (gateway has no internet egress either): BLOCKED - ConnectionRefusedError [Errno 111] Connection refused
+
+## vLLM ingress - only the gateway may connect
+pod in another namespace -> vllm:8000:  BLOCKED - ConnectionRefusedError [Errno 111] Connection refused
+
+## Control: the cluster does have internet - an unpoliced pod (namespace default) reaches the same IP
+pod in default namespace -> 1.1.1.1:443:  CONNECTED
+
+## Control: model-verify (the only palisade pod with 443 egress) reached Hugging Face + Sigstore this sync
+signature OK: qwen3-0.6b.json matches https://github.com/saimcyber/palisade/.github/workflows/model-manifest.yml@refs/heads/main
+trusted manifest: Qwen/Qwen3-0.6B@c1899de289a0 (10 files)
+PASS: all 10 files verified against a signed manifest
