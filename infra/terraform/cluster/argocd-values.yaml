@@ -48,9 +48,22 @@ repoServer:
         - mountPath: /sops-age
           name: sops-age
           readOnly: true
+        # Missing on the first version of this file - the sidecar crashed
+        # with "open .../plugin.yaml: no such file or directory" on a real
+        # deploy, because `configs.cmp.create: true` only creates the
+        # argocd-cmp-cm ConfigMap; it doesn't wire the mount into
+        # extraContainers automatically. The key inside it matches the
+        # plugin name (sops-decrypt.yaml) - confirmed by reading the
+        # ConfigMap the chart actually produced, not assumed.
+        - mountPath: /home/argocd/cmp-server/config/plugin.yaml
+          subPath: sops-decrypt.yaml
+          name: cmp-plugin-config
   volumes:
     - name: sops-tmp
       emptyDir: {}
+    - name: cmp-plugin-config
+      configMap:
+        name: argocd-cmp-cm
     - name: sops-age
       secret:
         # Provisioned by scripts/setup-sops-age.sh, never by Terraform or
