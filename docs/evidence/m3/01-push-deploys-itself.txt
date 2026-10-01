@@ -1,0 +1,29 @@
+# M3 acceptance (part 1): a push to git deploys itself
+# No kubectl apply, no argocd sync, no manual refresh - git push only.
+
+## BEFORE - live gateway env (prefix bug: PALISADE_* vars absent)
+$ kubectl -n palisade exec deploy/palisade-gateway -- env | grep -c ^PALISADE_
+0
+$ kubectl -n argocd get app palisade -o jsonpath={.status.sync.revision}
+04f04c42686fbdcba9f1a24128f386481db30144
+
+## PUSH
+$ git push origin main   ->  a21ef3ec4096a7711335658325e03a677214de91
+a21ef3e fix: envFrom prefix belongs on the entry, not inside configMapRef/secretRef
+
+## AFTER - Argo CD picked the commit up by itself
+$ kubectl -n argocd get app palisade
+NAME       REVISION                                   SYNC     HEALTH    LAST-OP     INITIATED-BY
+palisade   a21ef3ec4096a7711335658325e03a677214de91   Synced   Healthy   Succeeded   true
+$ kubectl -n palisade exec deploy/palisade-gateway -- env | grep ^PALISADE_ | cut -d= -f1
+PALISADE_API_KEY_HASHES
+PALISADE_LOG_LEVEL
+PALISADE_MAX_TOKENS_CEILING
+PALISADE_SERVED_MODEL_NAME
+PALISADE_UPSTREAM_BASE_URL
+$ kubectl -n palisade get pods
+NAME                                READY   STATUS      RESTARTS   AGE
+model-verify-hd7d8                  0/1     Completed   0          53s
+model-verify-l6kwn                  0/1     Error       0          66s
+palisade-gateway-7db94b947c-cbpb5   1/1     Running     0          9s
+vllm-6bddbdf7dd-k7f5j               1/1     Running     0          8m17s

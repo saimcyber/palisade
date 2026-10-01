@@ -1,0 +1,51 @@
+# M3 acceptance (part 2): an unsigned image is refused by the cluster, with a readable reason
+#
+# The unsigned image is the real gateway image plus one extra LABEL layer, pushed to
+# ghcr.io/saimcyber/palisade-gateway:unsigned-demo with a personal registry token -
+# i.e. what a stolen registry credential can do. It cannot be signed as this repo's
+# GitHub Actions workflow identity, which is the only signer Kyverno accepts.
+#
+# Both pods below are the gateway's own rendered pod spec, byte-for-byte, differing ONLY in
+# the image digest - so every baseline rule (non-root, drop ALL, read-only root, limits)
+# passes, and the signature is the only thing that can decide the outcome.
+
+## Diff between the two pod specs
+    6c6
+    <   name: gateway-signed
+    ---
+    >   name: gateway-unsigned
+    17c17
+    <     image: ghcr.io/saimcyber/palisade-gateway@sha256:d8a0af80253621922cb9d320691a2ce74a027d6ba5fadc67ff2ea6acfa5b891e
+    ---
+    >     image: ghcr.io/saimcyber/palisade-gateway@sha256:c07cca104d7d80068cb9a030e9c63e7a2a6c129e442a839e127b1eadfb36fba6
+
+## 1. Positive control - signed digest from CI (server-side dry run: full admission chain, nothing persisted)
+$ kubectl apply --dry-run=server -f signed-pod.yaml
+pod/gateway-signed created (server dry run)
+
+## 2. The unsigned digest - a real apply
+$ kubectl apply -f unsigned-pod.yaml
+Error from server: error when creating "/tmp/unsigned-pod.yaml": admission webhook "mutate.kyverno.svc-fail" denied the request:
+
+resource Pod/palisade/gateway-unsigned was blocked due to the following policies
+
+verify-palisade-image-signatures:
+  verify-gateway-signature: 'failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:c07cca104d7d80068cb9a030e9c63e7a2a6c129e442a839e127b1eadfb36fba6: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matching signatures found'
+[exit code 1]
+
+$ kubectl -n palisade get pod gateway-unsigned
+Error from server (NotFound): pods "gateway-unsigned" not found
+
+## 3. The same refusal through the GitOps path's object type (a Deployment, via Kyverno autogen)
+$ kubectl apply --dry-run=server -f unsigned-deployment.yaml
+Error from server: error when creating "/tmp/unsigned-deploy.yaml": admission webhook "mutate.kyverno.svc-fail" denied the request:
+
+resource Deployment/palisade/gateway-unsigned-deploy was blocked due to the following policies
+
+verify-palisade-image-signatures:
+  autogen-verify-gateway-signature: 'failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:c07cca104d7d80068cb9a030e9c63e7a2a6c129e442a839e127b1eadfb36fba6: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matching signatures found'
+
+## Kyverno's own record of the decision
+default   Warning   PolicyViolation   clusterpolicy/verify-palisade-image-signatures   Job palisade/model-verify: [autogen-verify-model-verify-signature] fail (blocked); failed to verify image ghcr.io/saimcyber/palisade-model-verify@sha256:8c83963329eecdbbb9c9f88b0291ac0580ba8cabc6d5975c6fc243fa04563c00: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matchi
+default   Warning   PolicyViolation   clusterpolicy/verify-palisade-image-signatures   Pod palisade/gateway-unsigned: [verify-gateway-signature] fail (blocked); failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:c07cca104d7d80068cb9a030e9c63e7a2a6c129e442a839e127b1eadfb36fba6: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matching signatures
+default   Warning   PolicyViolation   clusterpolicy/verify-palisade-image-signatures   Deployment palisade/gateway-unsigned-deploy: [autogen-verify-gateway-signature] fail (blocked); failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:c07cca104d7d80068cb9a030e9c63e7a2a6c129e442a839e127b1eadfb36fba6: .attestors[0].entries[0].keyless: sigstore bundle verification failed: n

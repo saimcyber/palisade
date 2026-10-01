@@ -1,0 +1,23 @@
+# End to end: Traefik Ingress -> gateway (non-root, read-only) -> vLLM (non-root, zero egress) -> RTX 3050
+
+$ curl -H "Host: palisade.local" .../readyz
+{"status":"ready"} [HTTP 200]
+
+$ curl ... /v1/chat/completions (Authorization header carrying an invalid key)
+{"detail":"Invalid API key"} [HTTP 401]
+
+$ curl ... /v1/chat/completions -H "Authorization: Bearer $DEMO_KEY" (stream=true)
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":null}],"prompt_token_ids":null,"prompt_text":null}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"content":"Git"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"content":"Ops"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" is"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" a"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" methodology"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b2e94cc9c3ec487a","object":"chat.completion.chunk","created":1790849275,"model
+... (stream truncated for the record)

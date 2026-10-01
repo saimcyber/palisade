@@ -11,8 +11,10 @@ spec:
     repoURL: https://github.com/saimcyber/palisade.git
     targetRevision: main
     path: deploy/policies
-    directory:
-      recurse: false
+    # Non-recursive is the default. Don't spell it out as
+    # `directory: {recurse: false}`: Argo CD normalises an all-default
+    # `directory` block away on the live object, so the root app would
+    # report this Application OutOfSync forever.
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

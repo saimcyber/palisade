@@ -1,0 +1,25 @@
+# Argo CD self-heal - git is the only source of truth; hand edits to the cluster are reverted
+
+## Drift 1: someone scales the gateway by hand (git says replicas: 1)
+$ kubectl -n palisade scale deploy/palisade-gateway --replicas=3
+deployment.apps/palisade-gateway scaled
+$ kubectl -n palisade get deploy palisade-gateway -o jsonpath={.spec.replicas}   (re-read after Argo CD reconciles)
+1
+
+## Drift 2: someone deletes the default-deny NetworkPolicy (the security-relevant case)
+$ kubectl -n palisade delete networkpolicy default-deny-all
+networkpolicy.networking.k8s.io "default-deny-all" deleted from palisade namespace
+$ kubectl -n palisade get networkpolicy default-deny-all   (re-read after Argo CD reconciles)
+NAME               POD-SELECTOR   AGE
+default-deny-all   <none>         2s
+
+## Argo CD's own record (most recent operations)
+- palisade: Succeeded | automated=true | successfully synced (all tasks run)
+- palisade-policies: Succeeded | automated=true | successfully synced (all tasks run)
+
+$ kubectl -n argocd get applications
+NAME                SYNC STATUS   HEALTH STATUS
+palisade            Synced        Healthy
+palisade-policies   Synced        Healthy
+palisade-secrets    Synced        Healthy
+root                OutOfSync     Healthy
