@@ -4,6 +4,24 @@
 # only piece this doesn't provide is the age private key itself, which
 # scripts/setup-sops-age.sh provisions separately, by hand, once.
 configs:
+  cm:
+    # Without this, vllm-hf-cache (storageClassName: local-path, which only ever
+    # binds WaitForFirstConsumer) deadlocks the palisade chart's sync-waves: the PVC
+    # stays Pending - correctly, by design - until the model-verify Job (wave 0, its
+    # first consumer) is scheduled, but Argo CD won't create wave 0 until the PVC's
+    # wave reports Healthy. Confirmed live - see ADR 0017. This reports any PVC with
+    # a status.phase as Healthy; sync-wave ordering still governs apply order, which
+    # is the only ordering guarantee this chart actually needs.
+    resource.customizations.health.PersistentVolumeClaim: |
+      hs = {}
+      if obj.status ~= nil and obj.status.phase ~= nil then
+        hs.status = "Healthy"
+        hs.message = obj.status.phase
+      else
+        hs.status = "Progressing"
+        hs.message = "Waiting for status.phase"
+      end
+      return hs
   cmp:
     create: true
     plugins:
