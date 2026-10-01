@@ -42,12 +42,30 @@ spec:
       # A Service named after its own app collides with vLLM's own
       # VLLM_PORT env var - the M1 finding this fix exists for.
       enableServiceLinks: false
+      # The upstream image runs as root by default. Nothing in vLLM needs
+      # root once the weights are already on disk, so it is held to the
+      # same baseline as every other pod (ADR 0019) rather than exempted.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.uid }}
+        runAsGroup: {{ .Values.uid }}
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: vllm
           image: "{{ .Values.vllm.image.repository }}:{{ .Values.vllm.image.tag }}"
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - --model={{ .Values.vllm.model }}
+            # Pinned to the commit the signed manifest names. model-verify
+            # downloads by commit SHA, which writes no refs/main into the
+            # HF cache - offline, a bare repo id would not resolve.
+            - --revision={{ .Values.vllm.revision }}
             - --served-model-name={{ .Values.vllm.servedModelName }}
             - --max-model-len={{ .Values.vllm.maxModelLen }}
             - --gpu-memory-utilization={{ .Values.vllm.gpuMemoryUtilization }}
@@ -58,12 +76,48 @@ spec:
               value: "1"
             - name: HF_HOME
               value: /hf-cache
+            # model-verify calls snapshot_download(cache_dir=$HF_HOME), so
+            # the repo lands at /hf-cache/models--*, not the default
+            # $HF_HOME/hub/models--*. Point the hub cache at the same root.
+            - name: HF_HUB_CACHE
+              value: /hf-cache
+            # Zero egress (networkpolicy-vllm.yaml) means any network call
+            # at startup stalls until timeout. Weights are already on the
+            # PVC, verified by model-verify, so tell every library so.
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+            - name: DO_NOT_TRACK
+              value: "1"
+            # Read-only root filesystem: every cache vLLM / torch / triton
+            # writes is redirected to the writable emptyDir.
+            - name: HOME
+              value: /scratch
+            - name: XDG_CACHE_HOME
+              value: /scratch/.cache
+            - name: VLLM_CACHE_ROOT
+              value: /scratch/.cache/vllm
+            - name: TRITON_CACHE_DIR
+              value: /scratch/.cache/triton
+            # UID {{ .Values.uid }} has no /etc/passwd entry in this image;
+            # getpass.getuser() falls back to these instead of raising.
+            - name: USER
+              value: vllm
+            - name: LOGNAME
+              value: vllm
           ports:
             - name: http
               containerPort: 8000
           volumeMounts:
             - name: hf-cache
               mountPath: /hf-cache
+            - name: scratch
+              mountPath: /scratch
+            - name: tmp
+              mountPath: /tmp
             - name: shm
               mountPath: /dev/shm
           resources:
@@ -99,6 +153,12 @@ spec:
         - name: hf-cache
           persistentVolumeClaim:
             claimName: vllm-hf-cache
+        - name: scratch
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
         - name: shm
           emptyDir:
             medium: Memory

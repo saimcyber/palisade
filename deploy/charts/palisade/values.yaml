@@ -1,5 +1,13 @@
 namespace: palisade
 
+# One numeric UID for every pod in the chart. It has to be numeric: the
+# images declare a *named* user (USER palisade / USER verify), and the
+# kubelet refuses runAsNonRoot when it cannot prove a name maps to a
+# non-zero UID (CreateContainerConfigError). 999 is what `useradd --system`
+# assigned in both images. Sharing it also matters functionally:
+# model-verify writes the HF cache that vLLM reads from and locks in.
+uid: 999
+
 gateway:
   image:
     repository: ghcr.io/saimcyber/palisade-gateway
@@ -36,6 +44,9 @@ vllm:
     repository: vllm/vllm-openai
     tag: v0.28.0
   model: Qwen/Qwen3-0.6B
+  # Must equal "revision" in deploy/model-manifests/qwen3-0.6b.json - the
+  # exact commit model-verify checked the SHA-256 of every file against.
+  revision: c1899de289a04d12100db370d81485cdf75e47ca
   servedModelName: palisade-small
   maxModelLen: 4096
   gpuMemoryUtilization: 0.6

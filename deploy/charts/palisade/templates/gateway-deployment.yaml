@@ -23,6 +23,9 @@ spec:
       enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
+        # Numeric, not inherited from the image - see values.yaml `uid`.
+        runAsUser: {{ .Values.uid }}
+        runAsGroup: {{ .Values.uid }}
         seccompProfile:
           type: RuntimeDefault
       containers:
