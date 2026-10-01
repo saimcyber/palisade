@@ -22,6 +22,11 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   backoffLimit: 1
+  # A pod that can never start (bad securityContext, missing secret) is
+  # not a *failure* to the Job controller, so backoffLimit never fires and
+  # Argo CD waits on this hook forever. A hard deadline turns that into a
+  # visible failed sync instead of a silent hang.
+  activeDeadlineSeconds: 900
   template:
     metadata:
       labels:
@@ -31,6 +36,10 @@ spec:
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true
+        # Same UID as vLLM: this Job writes the shared HF cache that vLLM
+        # then reads (and writes lock files into).
+        runAsUser: {{ .Values.uid }}
+        runAsGroup: {{ .Values.uid }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -41,6 +50,11 @@ spec:
               value: /hf-cache
             - name: MODEL_MANIFEST
               value: {{ .Values.vllm.modelVerify.manifest }}
+            # cosign caches Sigstore's TUF trust root under $HOME/.sigstore.
+            # The image's HOME (/home/verify) was never created and the
+            # root filesystem is read-only, so point it at an emptyDir.
+            - name: HOME
+              value: /scratch
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -49,6 +63,10 @@ spec:
           volumeMounts:
             - name: hf-cache
               mountPath: /hf-cache
+            - name: scratch
+              mountPath: /scratch
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 250m
@@ -56,6 +74,12 @@ spec:
             limits:
               memory: 2Gi
       volumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
         - name: hf-cache
           persistentVolumeClaim:
             claimName: vllm-hf-cache
