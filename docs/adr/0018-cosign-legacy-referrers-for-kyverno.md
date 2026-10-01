@@ -1,8 +1,10 @@
-# 0018 - cosign legacy signature layout, for Kyverno's sake
+# 0018 - Kyverno verifyImages: use type: SigstoreBundle, not Cosign
 
 ## Status
 
-Accepted (third iteration - see both false starts below, kept rather than erased)
+Accepted (fifth and final attempt in this investigation - the four before it are kept
+below, not erased, because each one's evidence was real even when its conclusion
+wasn't, and the next person hitting a similar error should see the whole path)
 
 ## Context
 
@@ -14,83 +16,117 @@ gateway Deployment and the model-verify Job were refused - not because they were
 signed, but because Kyverno reported `.attestors[0].entries[0].keyless: no signatures
 found` against images this project had itself signed and pushed in M2/M3.
 
-## False start #1: `--registry-referrers-mode=legacy`
+The policy's `verifyImages` rules didn't set `type:` at all, which defaults to `Cosign` -
+Kyverno's legacy verifier, built around cosign's pre-bundle, pre-OCI-1.1 signature
+layout. That default, not anything wrong with the signatures, turned out to be the
+entire problem.
 
-Reproduced outside Kyverno first: `cosign verify` succeeded from the host and from a
-cosign v3.1.3 pod inside the cluster, failed from a cosign v2.6.1 pod with the same
-error Kyverno reported. `docker manifest inspect` showed GHCR held only a
-no-`.sig`-suffix OCI-1.1-referrers fallback tag for the signed digest - no legacy
-`sha256-<digest>.sig` tag at all. That evidence was real; the fix drawn from it wasn't.
-`--registry-referrers-mode=legacy` looked like the right lever, broke CI twice finding
-its actual scope (the installer's default predates it; `cosign attest` doesn't have it
-at all in v3.1.3), and once both of those were fixed, a live redeploy with the
-"corrected" images failed with the *exact same error* against the *exact same, newly
-re-signed* digests. Checking the flag's own `--help` text properly at that point:
-"mode for **fetching** references from the registry" - it governs what cosign reads
-back, never what format `sign` writes. The whole premise was never true.
+## Four false starts
 
-## False start #2: pin Kyverno below kyverno/kyverno#17363
+**1. `--registry-referrers-mode=legacy`.** cosign v3 signs in the modern Sigstore bundle
+format; GHCR has no OCI 1.1 Referrers API, so cosign falls back to a tag with no `.sig`
+suffix that the `Cosign` verifier can't find - `docker manifest inspect` confirmed no
+legacy tag existed. This flag looked like the fix. It wasn't: its own `--help` text says
+it governs what cosign *fetches*, never what `sign` writes. Broke CI twice finding its
+actual scope (the installer's pinned default predates it; `cosign attest` doesn't have
+it at all in v3.1.3) before a live redeploy with "fixed" images failed with the identical
+error, disproving it outright.
 
-Searched Kyverno's own issue tracker next and found kyverno/kyverno#17363, a confirmed
-regression in v1.19.0/v1.19.1 where `verifyImages` fails against validly-signed images -
-assigned to an unreleased v1.19.2 milestone. This looked like confirmation from an
-independent source, so `kyverno_chart_version` was pinned down to `3.8.2` (app v1.18.2,
-the newest pre-1.19 release) and applied live.
+**2. Pin Kyverno below kyverno/kyverno#17363.** That issue describes a confirmed
+v1.19.0/v1.19.1 regression in `verifyImages`, which looked like independent
+confirmation. Downgraded to chart 3.8.2 (app v1.18.2) and tested live: identical
+failure, identical images. Falsified on this project's own evidence - the issue's own
+reporter also had no legacy tag, the same fact false-start #1 had already surfaced from
+a different angle.
 
-**It made no difference.** Kyverno v1.18.2 refused the identical images with the
-identical error. This falsifies the hypothesis outright, on this project's own evidence,
-not just a reread of the issue: #17363's own reporter notes in that thread that they have
-no legacy `.sig` tag either, which in hindsight was the same signal false start #1 had
-already produced - the two false starts were converging on the same underlying fact
-(cosign v3's images genuinely have no legacy-tagged signature to find) from different
-directions, and neither one noticed until the Kyverno-version variable was isolated and
-shown not to matter. `kyverno_chart_version` was reverted to `3.9.1`.
+**3. `--new-bundle-format=false --use-signing-config=false`.** The actual write-path
+flags, confirmed against both `cosign sign --help` and `cosign attest --help` directly
+this time. Kyverno found the resulting legacy-tagged signature - real progress - then
+failed one layer down: `x509: certificate signed by unknown authority`. A cosign v2.6.1
+pod inside the same cluster chained the identical certificate without issue, ruling out
+a network or CA-availability problem.
 
-## Real fix
+**4. Isolate the two flags; enable `features.tuf.enabled`.** cosign's CLI enforces that
+`--new-bundle-format=false` cannot be set without `--use-signing-config` also being
+explicit - `--use-signing-config=true` doesn't satisfy it either, so the pairing was not
+optional, and a commit that dropped it broke signing outright in CI (reverted
+immediately). Separately, discovered Kyverno's chart ships `features.tuf.enabled: false`
+by default, meaning it checks certificates against a root baked into the binary at build
+time rather than the live Sigstore TUF root - a real, independently worth-fixing
+discovery. Enabled it (`infra/terraform/cluster/kyverno-values.yaml`) and re-tested live.
+**No change** - identical x509 error, with TUF enabled, on both chart versions. This
+ruled out both the Kyverno-version hypothesis (#2) and a stale-trust-root hypothesis as
+the root cause, though TUF stayed enabled on its own merits (see Decision).
 
-Checked `--new-bundle-format` and `--use-signing-config` against both `cosign sign
---help` and `cosign attest --help` directly (both show as deprecated, not absent - a
-different failure mode than false start #1's `--registry-referrers-mode`, which was
-simply never valid on `attest`). Both parse on both commands. Set
-`--new-bundle-format=false --use-signing-config=false` on every `cosign sign` and
-`cosign attest` call in `.github/workflows/{ci,model-verify-image,sops-cmp-image}.yml`.
-This is the actual write-path control: it forces the pre-bundle, pre-OCI-1.1
-`sha256-<digest>.sig` / `.att` tag layout that Kyverno's verifier reads, rather than a
-flag that only ever touched how cosign looks things up.
+## Decisive test
 
-Before trusting this a third time, verified it against both of the checks the earlier
-two attempts skipped: `docker manifest inspect` against the new digest's
-`sha256-<digest>.sig` tag returns a real manifest (not "manifest unknown"), and a cosign
-v2.6.1 pod inside the cluster - the same stand-in that first reproduced the failure -
-verifies the new digest successfully. Only then was this pushed to a live resync.
+Decoded the actual certificate the legacy-format signature carried
+(`openssl x509 -in cert.pem -noout -issuer -ext authorityKeyIdentifier`, pulled from the
+`dev.sigstore.cosign/certificate` manifest annotation). The leaf certificate itself was
+fine - issued by production Fulcio (`O=sigstore.dev, CN=sigstore-intermediate`), correct
+GitHub Actions identity embedded, 10-minute validity as expected. But the sibling
+`dev.sigstore.cosign/chain` annotation - meant to carry the intermediate CA certificate
+needed to build a trust path from that leaf back to a root - was **zero bytes**. Nothing
+in the chain Kyverno has to work with connects the leaf to anything it trusts, TUF or
+not. `cosign sign --use-signing-config=false` is not writing a usable chain into the
+legacy-format OCI layer; cosign's own CLI verifies fine regardless because it always
+supplements from its live TUF cache rather than relying solely on that annotation.
+
+Confirmed this was fixable two ways, with hand-applied scratch `ClusterPolicy` objects in
+a throwaway `sigtest` namespace (never touched by Argo CD, so self-heal couldn't
+interfere), against the already-pushed, already-tested image digests - no new CI run, no
+new digest, no PR:
+
+- **T1**: the existing `Cosign`-type policy, with the real Fulcio intermediate + root PEM
+  (fetched from `https://fulcio.sigstore.dev/api/v1/rootCert`, confirmed its Subject Key
+  Identifier matches the leaf's Authority Key Identifier) pinned directly into
+  `attestors[].entries[].keyless.roots`. **Admitted** - confirmed in the admission
+  controller's own logs: `image attestors verification succeeded`.
+- **T2**: `type: SigstoreBundle` instead, against a *different* image digest that had
+  never been signed with the broken legacy-format flags at all - plain cosign v3
+  defaults, modern bundle format, no flags, no pinned roots. **Also admitted** - same
+  confirmed log line.
+
+## Decision
+
+Use **T2**: set `type: SigstoreBundle` on both `verifyImages` rules in
+`deploy/policies/kyverno-verify-signatures.yaml`, and revert every `cosign sign`/
+`cosign attest` call in `.github/workflows/{ci,model-verify-image,sops-cmp-image}.yml`
+back to plain defaults - no `--new-bundle-format`, no `--use-signing-config`, no legacy
+flags of any kind. `SigstoreBundle` reads cosign's actual, unmodified output; nothing
+about it depends on a cosign behavior (the empty-chain write) that only shows up under a
+specific, now-abandoned flag combination.
+
+`features.tuf.enabled: true` stays. It never independently fixed this bug, but a
+dynamically fetched, current Sigstore trust root is a real improvement over one frozen
+at Kyverno's build time, and the live tests above ran *with* it enabled throughout - it
+isn't implicated in anything that went wrong, and there's no reason to revert a
+correctness improvement found along the way.
 
 ## Alternatives considered
 
-- **Pin `cosign-release` to a real v2.x release for the sign/attest step**, since v2
-  writes the legacy layout natively with no flag needed. Not pursued: v3.1.3 is already
-  the version verified against this project's own `cosign verify` calls everywhere else
-  (ADR 0008); splitting signing onto an older major version than verification uses is a
-  worse inconsistency than one pair of deprecated flags.
-- **Try Kyverno's newer `type: SigstoreBundle` verifyImages mode**, on the chance it
-  reads the new-format bundle directly and needs no flag change at all. Not pursued once
-  the write-side flags were confirmed to work with the existing `ClusterPolicy` -
-  migrating the verification mechanism was unnecessary once the simpler fix on the
-  signing side was actually correct.
+- **T1's approach (pin Fulcio's roots directly into the policy).** Rejected in favor of
+  T2 even though it also passed: it carries an operational liability T2 doesn't - Fulcio
+  rotates its intermediate CA periodically, and a pinned PEM would need to be refreshed
+  by hand before the next rotation or admission would start failing again, silently,
+  for a completely different reason than anything in this ADR. `SigstoreBundle` has no
+  such expiry.
+- **Pin `cosign-release` to a real v2.x release for signing**, since v2 writes the
+  legacy layout's chain correctly and natively, with no flag needed. Not pursued once
+  T2 confirmed the policy-side fix works with plain v3 signing - no reason to split
+  signing onto an older major version than this project verifies everything else with.
 
 ## Consequences
 
-- `--new-bundle-format` and `--use-signing-config` are both marked deprecated by cosign
-  itself; a future cosign major version may remove them, at which point this project
-  will need either a real fix from Kyverno's side (a verifier that reads the new bundle
-  format) or a different workaround - tracked here, not assumed to be permanent.
-- The three already-pushed images (`palisade-gateway`, `palisade-model-verify`,
-  `palisade-sops-cmp`) were rebuilt multiple times across this investigation (CI builds
-  aren't reproducible, so each rebuild got a new digest); the `bump-digest` automation
-  (ADR 0007) is what kept `values.yaml` and `argocd-values.yaml` pointed at whichever
-  digest was actually live on GHCR at each step.
-- Two live Argo CD resyncs and a Kyverno chart downgrade-then-revert happened against
-  the running cluster while chasing this - all reversible, none left mid-state, but a
-  real cost of testing hypotheses against a live system instead of a fully offline
-  reproduction. The `docker manifest inspect` + in-cluster-verify gate above exists
-  specifically so the next person debugging a signature-admission issue here checks
-  the write format *before* the next live resync, not after.
+- The Kyverno policy now depends on `type: SigstoreBundle` being available, which
+  required Kyverno ≥ roughly v1.19 (confirmed present via
+  `kubectl explain clusterpolicy.spec.rules.verifyImages.type`) - a floor this project
+  is already above.
+- Every image this project signs now needs zero special signing flags - plain
+  `cosign sign`/`cosign attest`, matching the version verified everywhere else (ADR 0008).
+- Four live Argo CD resyncs, two Kyverno chart version changes (applied then reverted),
+  and a TUF feature toggle happened against the running cluster while chasing this.
+  All were reversible and none left the cluster mid-state, but it is the real cost of
+  testing hypotheses against a live system - the scratch-namespace technique that
+  finally isolated the cause (T1/T2) cost nothing against the live `palisade` app and
+  should be the first resort next time, not the last.

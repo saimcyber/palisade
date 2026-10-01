@@ -16,4 +16,6 @@ resource "helm_release" "kyverno" {
   version          = var.kyverno_chart_version
   namespace        = "kyverno"
   create_namespace = true
+
+  values = [file("${path.module}/kyverno-values.yaml")]
 }
