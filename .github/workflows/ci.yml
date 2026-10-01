@@ -146,19 +146,23 @@ jobs:
       # before assuming it still applied here). The signing identity is the
       # job's own OIDC token - see docs/adr/0008.
       #
-      # --registry-referrers-mode=legacy: cosign v3 defaults to writing
-      # signatures/attestations only as OCI 1.1 referrers, stored on a
+      # --registry-referrers-mode=legacy (cosign sign only - cosign attest
+      # has no such flag in v3.1.3, checked directly against its --help
+      # rather than assumed from sign's): cosign v3's sign defaults to
+      # writing the signature only as an OCI 1.1 referrer, stored on a
       # registry without a Referrers API (GHCR) under a fallback tag with
-      # no .sig/.att suffix. Kyverno v1.19.1's verifyImages attestor only
-      # reads the pre-OCI-1.1 sha256-<digest>.sig / .att tag convention and
-      # reports a flatly misleading "no signatures found" against an image
-      # that is, in fact, validly signed - a real, reproduced, upstream gap
+      # no .sig suffix. Kyverno v1.19.1's verifyImages attestor only reads
+      # the pre-OCI-1.1 sha256-<digest>.sig tag convention and reports a
+      # flatly misleading "no signatures found" against an image that is,
+      # in fact, validly signed - a real, reproduced, upstream gap
       # (kyverno/kyverno#17363), not a config mistake on this policy's side.
-      # See docs/adr/0018.
+      # The SBOM attestation below stays OCI-1.1-referrers-only - this
+      # policy only verifyImages's the signature, never the attestation,
+      # so that gap doesn't block anything today. See docs/adr/0018.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           cosign sign --yes --registry-referrers-mode=legacy "${IMAGE}@${{ steps.push.outputs.digest }}"
-          cosign attest --yes --registry-referrers-mode=legacy --type spdxjson --predicate sbom.spdx.json \
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
 
   # "git is the only route to production" (M3's own goal) only holds if the
