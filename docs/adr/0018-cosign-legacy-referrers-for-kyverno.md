@@ -42,13 +42,22 @@ repository's policy or signing invocation.
 
 ## Decision
 
-Pass `--registry-referrers-mode=legacy` to every `cosign sign` and `cosign attest` call
-in `.github/workflows/{ci,model-verify-image,sops-cmp-image}.yml`. This makes cosign
-additionally write the legacy `.sig`/`.att` tags Kyverno's current verifier can actually
-find, alongside whatever OCI-1.1-aware tooling already reads. `cosign verify`
-itself is unaffected either way - it checks both forms - so this changes nothing about
-what a human or a CI step running cosign directly can confirm; it only changes what an
+Pass `--registry-referrers-mode=legacy` to every `cosign sign` call in
+`.github/workflows/{ci,model-verify-image,sops-cmp-image}.yml`. This makes cosign
+additionally write the legacy `.sig` tag Kyverno's current verifier can actually find,
+alongside whatever OCI-1.1-aware tooling already reads. `cosign verify` itself is
+unaffected either way - it checks both forms - so this changes nothing about what a
+human or a CI step running cosign directly can confirm; it only changes what an
 in-cluster admission controller stuck on the older convention is able to see.
+
+`cosign attest` does **not** take this flag at all in v3.1.3 - checked directly against
+its own `--help` output rather than assumed from `sign`'s, after a first attempt to pass
+it there too failed CI with `unknown flag: --registry-referrers-mode`. The SBOM
+attestation this project generates therefore stays OCI-1.1-referrers-only. That's an
+acceptable gap here: `verify-palisade-image-signatures` (ADR 0013) only
+`verifyImages`'s the *signature*, never the attestation - there is currently nothing in
+this cluster that needs to read the SBOM attestation back out, so its storage format
+doesn't block anything.
 
 ## Alternatives considered
 
