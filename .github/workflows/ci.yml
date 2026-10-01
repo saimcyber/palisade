@@ -142,10 +142,16 @@ jobs:
       # v1-era requirement, checked directly against `cosign sign --help`
       # before assuming it still applied here). The signing identity is the
       # job's own OIDC token - see docs/adr/0008.
+      #
+      # --new-bundle-format=false --use-signing-config=false: forces the
+      # pre-OCI-1.1 sha256-<digest>.sig / .att tag layout, which is what
+      # Kyverno's verifyImages attestor reads - see ADR 0018. Deprecated
+      # (cosign warns they'll be removed), accepted deliberately: the
+      # alternative is a signature this cluster's own policy can't find.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
-          cosign attest --yes --type spdxjson --predicate sbom.spdx.json \
+          cosign sign --yes --new-bundle-format=false --use-signing-config=false "${IMAGE}@${{ steps.push.outputs.digest }}"
+          cosign attest --yes --new-bundle-format=false --use-signing-config=false --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
 
   # "git is the only route to production" (M3's own goal) only holds if the
