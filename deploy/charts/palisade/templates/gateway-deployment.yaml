@@ -41,16 +41,21 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.gateway.port }}
+          # `prefix` is a field of the envFrom entry, a sibling of
+          # configMapRef/secretRef - not nested inside them. Nested, the API
+          # server silently drops it: the gateway then reads none of its
+          # PALISADE_* settings (running on defaults, with no API-key
+          # hashes) and Argo CD sees a permanent diff it re-applies forever.
           envFrom:
-            - configMapRef:
+            - prefix: PALISADE_
+              configMapRef:
                 name: palisade-gateway-config
-                prefix: PALISADE_
             # Secret's own key must be named API_KEY_HASHES (becomes
             # PALISADE_API_KEY_HASHES via the same prefix) - see the
             # example in ADR 0015.
-            - secretRef:
+            - prefix: PALISADE_
+              secretRef:
                 name: {{ .Values.gateway.apiKeyHashesSecretName }}
-                prefix: PALISADE_
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
