@@ -80,10 +80,15 @@ jobs:
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
+      # --registry-referrers-mode=legacy: see ci.yml's comment on the same
+      # flag and docs/adr/0018. This image isn't Kyverno-verified today
+      # (the policy only scopes palisade-gateway*/palisade-model-verify*),
+      # but there's no reason to sign it in a format only half the
+      # project's own tooling can read.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
-          cosign attest --yes --type spdxjson --predicate sbom.spdx.json \
+          cosign sign --yes --registry-referrers-mode=legacy "${IMAGE}@${{ steps.push.outputs.digest }}"
+          cosign attest --yes --registry-referrers-mode=legacy --type spdxjson --predicate sbom.spdx.json \
             "${IMAGE}@${{ steps.push.outputs.digest }}"
 
   bump-digest:
