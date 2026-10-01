@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (live verification pending - see Consequences)
+Accepted - verified by a clean rebuild (docs/evidence/m3/06-clean-rebuild.txt)
 
 ## Context
 
@@ -70,7 +70,9 @@ pipeline", a bootstrap race that skips enforcement is a real hole, not a cosmeti
 - The Application health check is cluster-wide inside this Argo CD install. A child app
   that is degraded now also shows its parent as Progressing or Degraded. That is the
   intended signal, but it means `root` is no longer green while any child is not.
-- **Verification status:** the change was written and linted while the cluster was
-  down (the WSL VM restarted mid-task). The ordering has to be proven by the clean
-  rebuild (`make down && make up && make gitops`), with policies observed Healthy
-  before any palisade pod exists. That rebuild is the next M3 step.
+- **Verified by a clean rebuild** (`make down && make up && make gpu-check && make gitops`,
+  exit 0): on the brand-new cluster, every NetworkPolicy and ClusterPolicy was created
+  before the first `palisade` pod (`docs/evidence/m3/06-clean-rebuild.txt`). The same run
+  also showed the model-verify deadline and Argo CD's automated retry working together:
+  stalled downloads hit `activeDeadlineSeconds`, Argo CD retried, and the partial blob
+  resumed from the PVC, with no manual intervention.

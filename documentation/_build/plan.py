@@ -420,7 +420,7 @@ def milestones(D):
         "`M0 ACCEPTANCE PASSED`; `make doctor` reports 28 passed, 0 failed.")
 
     # ---------------- M1
-    D.h2("M1 - The inference service   (NEXT)")
+    D.h2("M1 - The inference service   (COMPLETE)")
     D.p("**Goal:** a real model answering real requests on the local GPU, behind the first version "
         "of the gateway.")
     D.bullet("vLLM serving Qwen2.5-0.5B-Instruct, sized to 4 GB of VRAM")
@@ -431,7 +431,7 @@ def milestones(D):
     D.p("**Acceptance:** `curl -N` against the gateway streams tokens generated on the local GPU.")
 
     # ---------------- M2
-    D.h2("M2 - Supply chain and CI/CD")
+    D.h2("M2 - Supply chain and CI/CD   (COMPLETE)")
     D.p("**Goal:** make it impossible to ship an artefact that has not been scanned, described and "
         "signed - and prove no long-lived cloud credential exists anywhere.")
     D.bullet("Terraform: S3 for model artifacts, S3 backend for state, GitHub OIDC provider, and an IAM role assumable **only** by this repository")
@@ -443,7 +443,7 @@ def milestones(D):
         "from the terminal; the GitHub repository contains **no stored AWS secrets**.")
 
     # ---------------- M3
-    D.h2("M3 - Kubernetes, GitOps and policy")
+    D.h2("M3 - Kubernetes, GitOps and policy   (COMPLETE)")
     D.p("**Goal:** git becomes the only route to production, and the cluster itself enforces the "
         "rules rather than trusting the pipeline.")
     D.bullet("Helm chart: Deployments, Services, Ingress, ConfigMaps, PodDisruptionBudget")
@@ -458,7 +458,7 @@ def milestones(D):
         "demonstration in the project.")
 
     # ---------------- M4
-    D.h2("M4 - Platform features and observability")
+    D.h2("M4 - Platform features and observability   (NEXT)")
     D.p("**Goal:** the platform becomes multi-tenant and legible - who is using it, what it costs, "
         "and whether it is healthy.")
     D.bullet("Hashed per-tenant API keys and sliding-window rate limits")

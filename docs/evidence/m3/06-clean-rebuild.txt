@@ -1,0 +1,64 @@
+# Clean rebuild: make down && make up && make gpu-check && make gitops
+# A brand-new k3d cluster, nothing carried over except the age key file (ADR 0015).
+
+## Script stages (from the run's own log)
+### make down
+### make up
+==> Preflight
+==> Creating k3d cluster 'palisade' (profile: lite)
+==> Waiting for the node to become Ready
+==> Waiting for the nvidia RuntimeClass
+==> Generating the CDI spec inside k3d-palisade-server-0
+==> GPU wiring complete
+==> Cluster ready
+### make gpu-check
+==> Submitting the GPU check job
+==> Waiting for the job to complete
+M0 ACCEPTANCE PASSED - Kubernetes scheduled a pod that can see the GPU.
+### make gitops
+==> 1/6  age key for the SOPS plugin
+==> Checking for an existing key at /home/saim/.config/palisade/age.key
+==> Checking for the sops-age Secret in namespace 'argocd'
+==> 2/6  Argo CD + Kyverno (Terraform Helm provider)
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+==> 3/6  Waiting for Kyverno and Argo CD to be Available
+==> 4/6  Pre-pulling the vLLM image into the node
+==> 5/6  Root Application (app-of-apps)
+==> 6/6  Waiting for every Application to be Synced + Healthy
+  GitOps is up. From here on, change the cluster by pushing to main.
+### EXIT 0
+
+## Policy-first ordering (ADR 0020): policies existed before any workload pod
+Creation order, oldest first:
+ 1.   NetworkPolicy/allow-gateway
+ 2.   NetworkPolicy/allow-model-verify-egress
+ 3.   NetworkPolicy/allow-vllm-ingress-from-gateway-only
+ 4.   NetworkPolicy/default-deny-all
+ 5.   ClusterPolicy/disallow-latest-tag
+ 6.   ClusterPolicy/palisade-pod-security-baseline
+ 7.   ClusterPolicy/verify-palisade-image-signatures
+ 8.   Pod/model-verify-nc2j7
+ 9.   Pod/vllm-6bddbdf7dd-vz6ck
+10.   Pod/palisade-gateway-7db94b947c-n6q2k
+
+## Note: one transient failure, recovered without intervention
+The first model-verify attempts stalled mid-download on a flaky network and hit the Job's
+activeDeadlineSeconds; Argo CD's automated sync retried, and huggingface_hub resumed the
+partial blob from the PVC. Verification still checked every file's SHA-256 before passing.
+
+$ kubectl -n argocd get applications
+NAME                SYNC STATUS   HEALTH STATUS
+palisade            Synced        Healthy
+palisade-policies   Synced        Healthy
+palisade-secrets    Synced        Healthy
+root                Synced        Healthy
+
+$ kubectl -n palisade get pods
+NAME                                READY   STATUS      RESTARTS   AGE
+model-verify-nc2j7                  0/1     Completed   0          6m55s
+palisade-gateway-7db94b947c-n6q2k   1/1     Running     0          39s
+vllm-6bddbdf7dd-vz6ck               1/1     Running     0          2m48s
+
+$ curl -H "Host: palisade.local" localhost:8080/v1/chat/completions (demo key, non-streaming)
+model: palisade-small
+reply: Hello! 🌟
