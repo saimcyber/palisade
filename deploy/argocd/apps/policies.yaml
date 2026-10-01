@@ -5,6 +5,10 @@ kind: Application
 metadata:
   name: palisade-policies
   namespace: argocd
+  annotations:
+    # First: Kyverno policies and NetworkPolicies must be in force before
+    # any workload exists to be admitted or reached (ADR 0020).
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   project: default
   source:
@@ -17,7 +21,14 @@ spec:
     # report this Application OutOfSync forever.
   destination:
     server: https://kubernetes.default.svc
+    namespace: palisade
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    # This app now syncs before the chart that declares the palisade
+    # Namespace, and its NetworkPolicies live in that namespace - so it has
+    # to be able to create it. The chart's own Namespace manifest adopts
+    # it afterwards (CreateNamespace does not track what it creates).
+    syncOptions:
+      - CreateNamespace=true

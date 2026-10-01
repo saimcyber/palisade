@@ -25,7 +25,7 @@ else
   R :=
 endif
 
-.PHONY: help doctor tools k3s-image up up-lite up-full down nuke \
+.PHONY: help doctor tools k3s-image up up-lite up-full down nuke gitops \
         gpu-cdi gpu-check cluster-info docs-export kubeconfig test lint fmt clean
 
 # --- meta --------------------------------------------------------------------
@@ -59,6 +59,9 @@ up-lite: ## Create the cluster + GPU support (fits comfortably in 16GB)
 
 up-full: ## Create the cluster + Argo CD + observability (heavier)
 	@PROFILE=full bash scripts/cluster-up.sh
+
+gitops: ## Bootstrap age key + Argo CD + Kyverno + root app, wait until all Synced (M3)
+	@bash scripts/gitops-up.sh
 
 down: ## Delete the cluster (images and volumes are kept)
 	@bash scripts/cluster-down.sh
