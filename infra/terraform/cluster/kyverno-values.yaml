@@ -1,0 +1,14 @@
+# features.tuf.enabled defaults to false in the kyverno chart - Kyverno then
+# verifies against a trust root baked into its own binary at build time
+# instead of the live Sigstore TUF root. Tried first while chasing an
+# "x509: certificate signed by unknown authority" admission failure - it
+# turned out NOT to be the fix (the real cause, a signature missing its
+# intermediate CA cert, is fixed on the signing/policy side - see ADR
+# 0018). Left enabled anyway: a dynamically fetched, current trust root is
+# a real improvement over a root frozen at the image's build time,
+# independent of the bug this was chasing when it was added.
+# root/rootRaw/mirror are left unset - Kyverno then fetches the standard
+# public-good Sigstore TUF root, the same one cosign's own CLI uses.
+features:
+  tuf:
+    enabled: true

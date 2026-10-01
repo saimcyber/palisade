@@ -2,6 +2,21 @@
 # the cluster with a readable reason. Scoped to ghcr.io/saimcyber/* only -
 # vLLM's own upstream image (vllm/vllm-openai) is never expected to carry
 # this project's signature, and shouldn't be required to.
+#
+# type: SigstoreBundle on both rules below, not the Cosign default: cosign
+# v3 signs in the modern Sigstore bundle format (OCI 1.1 referrers, or a
+# registry-specific fallback tag on a registry without the Referrers API,
+# like GHCR). The Cosign-type attestor only reads the pre-bundle legacy
+# sha256-<digest>.sig/.att tag convention and, worse, even forcing cosign
+# to also emit that legacy layout (via its deprecated
+# --new-bundle-format=false --use-signing-config=false flags) produced a
+# signature whose embedded certificate chain was missing its intermediate
+# CA - "x509: certificate signed by unknown authority" on every admission
+# attempt, confirmed live, even though cosign's own CLI verified the exact
+# same certificate successfully. SigstoreBundle reads cosign's actual,
+# unmodified default output and needs none of that. See ADR 0018 for the
+# full investigation, including the three things that were tried and
+# ruled out before this.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -26,6 +41,7 @@ spec:
         - imageReferences:
             - "ghcr.io/saimcyber/palisade-gateway*"
           failureAction: Enforce
+          type: SigstoreBundle
           attestors:
             - entries:
                 - keyless:
@@ -43,6 +59,7 @@ spec:
         - imageReferences:
             - "ghcr.io/saimcyber/palisade-model-verify*"
           failureAction: Enforce
+          type: SigstoreBundle
           attestors:
             - entries:
                 - keyless:
