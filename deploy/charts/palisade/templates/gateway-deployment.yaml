@@ -9,6 +9,12 @@ metadata:
   labels:
     {{- include "palisade.labels" . | nindent 4 }}
     app.kubernetes.io/name: palisade-gateway
+  annotations:
+    # After vLLM (wave 1), never before it. /readyz is only 200 once vLLM
+    # answers, and Argo CD will not start a wave until the previous one is
+    # Healthy - with the gateway in the default wave 0 the two wait on
+    # each other forever (seen on the first real sync).
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: {{ .Values.gateway.replicas }}
   selector:
