@@ -1,0 +1,15 @@
+GPU exporter fix - confirmed in the actual production Deployment, not
+just a scratch pod, after the bump-digest PR (#21) merged.
+
+$ kubectl get deploy -n monitoring gpu-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'
+ghcr.io/saimcyber/palisade-gpu-exporter@sha256:6e5cbe2110bba13af6d5da325616d9203502ed12ade20677854f59612d2acc6c
+
+$ curl .../api/v1/query?query=nvidia_smi_last_collect_success
+nvidia_smi_last_collect_success{job="gpu-exporter"} 1
+
+$ curl .../api/v1/query?query=nvidia_smi_utilization_gpu_ratio
+nvidia_smi_utilization_gpu_ratio{index="0",job="gpu-exporter"} 0
+
+The GPU & Model dashboard's nvidia-smi panels are now backed by real
+data in the actual running deployment, closing the limitation M4 was
+originally shipped with.
