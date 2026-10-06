@@ -1,0 +1,41 @@
+M4 observability stack - live verification
+===========================================
+
+Prometheus scrape targets (all 5, all up):
+  gpu-exporter          up
+  kube-state-metrics    up
+  kyverno               up
+  palisade-gateway      up
+  vllm                  up
+
+Grafana dashboards provisioned (via /api/search):
+  Palisade / Cost & Tenancy   uid=palisade-cost
+  Palisade / GPU & Model      uid=palisade-gpu
+  Palisade / Security         uid=palisade-security
+  Palisade / SLO              uid=palisade-slo
+Grafana /api/health: {"database":"ok","version":"13.2.3"}
+
+Alert rules loaded, all health=ok.
+
+PalisadeTenantBudgetExhausted fired for real, triggered by sending
+requests to tenant-b after its budget was exhausted by the k6 run:
+
+  state: firing
+  activeAt: 2026-10-06T21:00:39Z
+  labels: {alertname: PalisadeTenantBudgetExhausted, tenant: tenant-b, severity: info}
+  annotations: {summary: "A tenant hit its token budget - tenant-b"}
+  value: 3.16 (increase(palisade_budget_rejected_total[5m]))
+
+Known limitation confirmed live: the GPU exporter's nvidia-smi-sourced
+metrics never populate (nvidia_smi_last_collect_success stays 0) - the
+image has no /usr/bin for CDI's symlink hook to inject nvidia-smi into.
+See deploy/observability/gpu-exporter.yaml's header comment and ADR 0023.
+vLLM's own /metrics (queue depth, request counts) is unaffected.
+
+Real tenant token data from Prometheus after the k6 run (01-two-tenants-k6-run.txt):
+  palisade_tenant_tokens_total{tenant="tenant-a",direction="prompt"}     756
+  palisade_tenant_tokens_total{tenant="tenant-a",direction="completion"} 905
+  palisade_tenant_tokens_total{tenant="tenant-b",direction="prompt"}     225
+  palisade_tenant_tokens_total{tenant="tenant-b",direction="completion"} 278
+  palisade_tenant_budget_remaining{tenant="tenant-a"} 48339   (of 50000)
+  palisade_tenant_budget_remaining{tenant="tenant-b"} 0       (of 500 - exhausted)
