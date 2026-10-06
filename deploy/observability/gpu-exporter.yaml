@@ -45,7 +45,7 @@ spec:
           # Built, scanned, signed and pushed by its own workflow -
           # .github/workflows/gpu-exporter-image.yml - bumped
           # automatically by its bump-digest job.
-          image: ghcr.io/saimcyber/palisade-gpu-exporter@sha256:0000000000000000000000000000000000000000000000000000000000000 # GPU_EXPORTER_DIGEST
+          image: ghcr.io/saimcyber/palisade-gpu-exporter@sha256:6e5cbe2110bba13af6d5da325616d9203502ed12ade20677854f59612d2acc6c # GPU_EXPORTER_DIGEST
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
