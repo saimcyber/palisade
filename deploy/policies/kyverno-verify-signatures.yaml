@@ -3,6 +3,12 @@
 # vLLM's own upstream image (vllm/vllm-openai) is never expected to carry
 # this project's signature, and shouldn't be required to.
 #
+# A third rule (M4) covers the gpu-exporter namespace, "monitoring" - a
+# signature nobody checks is decoration (M3's own documentation says so),
+# and that was true of this image for exactly as long as it took to notice:
+# it was signed by its own CI from the day it existed, but nothing in this
+# policy matched its namespace until this rule was added.
+#
 # type: SigstoreBundle on both rules below, not the Cosign default: cosign
 # v3 signs in the modern Sigstore bundle format (OCI 1.1 referrers, or a
 # registry-specific fallback tag on a registry without the Referrers API,
@@ -64,6 +70,24 @@ spec:
             - entries:
                 - keyless:
                     subject: "https://github.com/saimcyber/palisade/.github/workflows/model-verify-image.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+    - name: verify-gpu-exporter-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["monitoring"]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/saimcyber/palisade-gpu-exporter*"
+          failureAction: Enforce
+          type: SigstoreBundle
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/saimcyber/palisade/.github/workflows/gpu-exporter-image.yml@refs/heads/main"
                     issuer: "https://token.actions.githubusercontent.com"
                     rekor:
                       url: https://rekor.sigstore.dev

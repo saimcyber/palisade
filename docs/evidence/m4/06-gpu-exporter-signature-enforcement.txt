@@ -1,0 +1,31 @@
+Kyverno signature verification extended to the monitoring namespace
+=====================================================================
+
+Gap found during the M4 "perfect" review: verify-palisade-image-signatures
+only matched namespaces: ["palisade"], so the gpu-exporter image - signed
+by its own CI from the day it existed (gpu-exporter-image.yml) - had no
+policy checking that signature at admission. A signature nobody checks is
+decoration (M3's own documentation says exactly this).
+
+Added a third rule, verify-gpu-exporter-signature, matching namespace
+"monitoring" and imageReferences "ghcr.io/saimcyber/palisade-gpu-exporter*",
+with the same SigstoreBundle verification and keyless subject pattern as
+the other two rules, pointed at gpu-exporter-image.yml's own identity.
+
+Positive control, live: `kubectl rollout restart -n monitoring
+deploy/gpu-exporter` after applying the new policy. The real signed image
+was re-admitted and the rollout completed normally - confirms the new
+rule does not break the thing it's meant to allow.
+
+Negative control: attempted but not completed. The plan (matching M3's
+own tampered-image test) was to push a modified copy of the real image
+under a new, unsigned digest and confirm Kyverno denies it. `gh auth
+token` in this environment does not carry the packages:write scope ghcr.io
+push requires (`denied: denied` from the registry) - the same class of
+scope gap M2's investigation found with `workflow` scope. Not chased
+further: the verification code path (type: SigstoreBundle, keyless
+subject matching) is identical to the gateway and model-verify rules,
+which already have a real tampered-image negative control in M3's own
+evidence (docs/evidence/m3/03-unsigned-image-refused.txt) - this rule
+adds a third imageReferences pattern to the same proven mechanism, not
+new logic.

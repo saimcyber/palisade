@@ -59,6 +59,12 @@ spec:
               memory: 96Mi
             limits:
               memory: 256Mi
+          # Every dashboard/provisioning mount below uses subPath, which
+          # means none of them live-update when their ConfigMap changes -
+          # subPath mounts are a one-time bind at pod creation, not a
+          # kubelet-watched symlink like a whole-directory mount is. A
+          # dashboard edit here needs `kubectl rollout restart
+          # deploy/grafana` (found live, editing the Cost dashboard).
           volumeMounts:
             - name: tmp
               mountPath: /tmp
