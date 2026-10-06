@@ -57,7 +57,7 @@ up: up-lite ## Alias for up-lite
 up-lite: ## Create the cluster + GPU support (fits comfortably in 16GB)
 	@PROFILE=lite bash scripts/cluster-up.sh
 
-up-full: ## Reserved for M4 observability (today identical to up-lite)
+up-full: ## Identical to up-lite - M4's observability stack measured small enough to always run via gitops (ADR 0023)
 	@PROFILE=full bash scripts/cluster-up.sh
 
 check-time: ## Fail if a tracked file has a calendar date or schedule wording (project rule)

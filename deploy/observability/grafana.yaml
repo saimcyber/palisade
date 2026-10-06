@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The official image's own default user - set explicitly rather
+        # than inherited, same reasoning as every other pod in this
+        # project (values.yaml `uid`'s comment).
+        runAsUser: 472
+        runAsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          # Verified against the project's Docker Hub tag list before
+          # pinning (project rule).
+          image: grafana/grafana:13.2.3
+          env:
+            # SOPS-encrypted (grafana-secret.enc.yaml) - see ADR 0015 for
+            # the mechanism and ADR 0023 for why this secret lives next to
+            # the rest of the observability stack rather than in
+            # deploy/secrets/.
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: GF_SECURITY_ADMIN_PASSWORD
+            # No signup, no anonymous access - a portfolio demo has no
+            # real users to protect, but the defaults should still look
+            # like a real deployment's.
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+              subPath: datasources.yaml
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: dashboards.yaml
+            - name: dashboard-slo
+              mountPath: /var/lib/grafana/dashboards/slo.json
+              subPath: slo.json
+            - name: dashboard-gpu
+              mountPath: /var/lib/grafana/dashboards/gpu.json
+              subPath: gpu.json
+            - name: dashboard-cost
+              mountPath: /var/lib/grafana/dashboards/cost.json
+              subPath: cost.json
+            - name: dashboard-security
+              mountPath: /var/lib/grafana/dashboards/security.json
+              subPath: security.json
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+        - name: dashboard-slo
+          configMap:
+            name: grafana-dashboard-slo
+        - name: dashboard-gpu
+          configMap:
+            name: grafana-dashboard-gpu
+        - name: dashboard-cost
+          configMap:
+            name: grafana-dashboard-cost
+        - name: dashboard-security
+          configMap:
+            name: grafana-dashboard-security
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

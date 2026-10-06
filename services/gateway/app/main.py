@@ -12,10 +12,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from redis.asyncio import Redis
 from starlette.responses import Response
 
+from .cache import ResponseCache
+from .config import settings
 from .observability import configure_logging, new_request_id, request_id_var
 from .routes import chat, health
+from .tenancy import TenantStore, load_tenants
 from .upstream import make_client
 
 
@@ -23,10 +27,15 @@ from .upstream import make_client
 async def lifespan(app: FastAPI):
     configure_logging()
     app.state.http_client = make_client()
+    app.state.tenants = load_tenants()
+    app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    app.state.tenant_store = TenantStore(app.state.redis)
+    app.state.response_cache = ResponseCache(app.state.redis)
     try:
         yield
     finally:
         await app.state.http_client.aclose()
+        await app.state.redis.aclose()
 
 
 def create_app() -> FastAPI:

@@ -50,12 +50,13 @@ spec:
             - prefix: PALISADE_
               configMapRef:
                 name: palisade-gateway-config
-            # Secret's own key must be named API_KEY_HASHES (becomes
-            # PALISADE_API_KEY_HASHES via the same prefix) - see the
-            # example in ADR 0015.
+            # Secret's own key must be named TENANTS (becomes
+            # PALISADE_TENANTS via the same prefix) - see ADR 0015 for the
+            # envFrom-prefix mechanism and ADR 0021 for why tenant facts
+            # are a secret rather than Redis-resident.
             - prefix: PALISADE_
               secretRef:
-                name: {{ .Values.gateway.apiKeyHashesSecretName }}
+                name: {{ .Values.gateway.tenantsSecretName }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -5,3 +5,15 @@
 creation_rules:
   - path_regex: deploy/secrets/.*\.enc\.yaml$
     age: age182ep8d0hyvnwfj3nhzv64xrdvm4fwpudc0wvvkxncqygzzpxkeks4mldng
+  # Same recipient, a second, single-file location: the sops-decrypt CMP's
+  # generate command (argocd-values.yaml) concatenates every *.yaml file
+  # in an Application's source path with no document separator between
+  # them - fine when a directory holds exactly one file (deploy/secrets/
+  # always has), but deploy/observability/ holds twelve, so a
+  # SOPS-encrypted secret can never share that directory. This one
+  # (Grafana's admin password) gets its own Application
+  # (palisade-observability-secrets, docs/adr/0023) for exactly that
+  # reason, plus the existing one of never blocking the core workload
+  # chain (ADR 0020) the way palisade-secrets legitimately does.
+  - path_regex: deploy/observability-secrets/.*\.enc\.yaml$
+    age: age182ep8d0hyvnwfj3nhzv64xrdvm4fwpudc0wvvkxncqygzzpxkeks4mldng

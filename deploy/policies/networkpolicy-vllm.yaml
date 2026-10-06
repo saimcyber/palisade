@@ -4,6 +4,11 @@
 # ever accidentally grow one. Model verification needed real egress
 # (Hugging Face, Sigstore) - that's exactly why it runs as its own Job in
 # its own pod (ADR 0012), never inside this one.
+#
+# Two ingress sources, not one: the gateway (the actual API path) and
+# Prometheus, scraping vLLM's own /metrics on the same port (ADR 0023) -
+# scraping is inbound to vLLM, so it doesn't touch the no-egress claim at
+# all.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -20,6 +25,13 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: palisade-gateway
+      ports:
+        - protocol: TCP
+          port: 8000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
           port: 8000

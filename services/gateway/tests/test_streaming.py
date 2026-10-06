@@ -48,3 +48,48 @@ def test_stream_chunks_relayed_in_order(client, auth_headers):
         contents.append(chunk["choices"][0]["delta"]["content"])
 
     assert contents == ["Hel", "lo", "!"]
+
+
+SSE_BODY_WITH_USAGE = (
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+    'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
+    "data: [DONE]\n\n"
+)
+
+
+def _completion_tokens_for_tenant_a(metrics_text: str) -> float:
+    # The Prometheus registry is a process-wide singleton, so its counters
+    # accumulate across every test in the session - comparing a before/
+    # after delta is the only reliable assertion, not an absolute value.
+    for line in metrics_text.splitlines():
+        if line.startswith(
+            'palisade_tenant_tokens_total{direction="completion",tenant="tenant-a"}'
+        ):
+            return float(line.rsplit(" ", 1)[1])
+    return 0.0
+
+
+@respx.mock
+def test_stream_usage_chunk_reconciles_the_budget_and_bills_the_tenant(
+    client, auth_headers
+):
+    respx.post("http://upstream.test/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            content=SSE_BODY_WITH_USAGE,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+    before = _completion_tokens_for_tenant_a(client.get("/metrics").text)
+
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        headers=auth_headers,
+        json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+    ) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())  # drain the stream so `finally` runs
+
+    after = _completion_tokens_for_tenant_a(client.get("/metrics").text)
+    assert after - before == 3

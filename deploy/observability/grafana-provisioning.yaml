@@ -1,0 +1,29 @@
+# Grafana's own file-based provisioning (datasources + dashboard loader),
+# not its API or a sidecar - the dashboards themselves are each a separate
+# ConfigMap (grafana-dashboard-*.yaml), mounted read-only into the folder
+# this config points at, so "what dashboards exist" is fully defined by
+# what's in Git, the same GitOps posture as everything else in this
+# project.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.monitoring.svc:9090
+        isDefault: true
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: palisade
+        folder: Palisade
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards

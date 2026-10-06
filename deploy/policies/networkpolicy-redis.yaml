@@ -1,0 +1,24 @@
+# Mirrors allow-vllm-ingress-from-gateway-only: only the gateway may reach
+# Redis, and Redis gets no egress of its own (default-deny-all's empty
+# rule governs it, same as vLLM) - it has no legitimate reason to call out
+# anywhere, and a compromised Redis with no egress can't be used to exfiltrate
+# the rate-limit/budget/cache data it holds.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress-from-gateway-only
+  namespace: palisade
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: palisade-gateway
+      ports:
+        - protocol: TCP
+          port: 6379

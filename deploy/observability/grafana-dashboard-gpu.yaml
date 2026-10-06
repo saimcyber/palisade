@@ -1,0 +1,58 @@
+# vLLM's own metric names (vllm:*) come from its built-in /metrics
+# endpoint - confirmed present by name in vLLM's source, not independently
+# re-verified against this project's exact v0.28.0 build; if a panel
+# comes back empty, check the live /metrics output before assuming the
+# dashboard is wrong.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-gpu
+  namespace: monitoring
+  labels:
+    grafana-dashboard: "true"
+data:
+  gpu.json: |
+    {
+      "title": "Palisade / GPU & Model",
+      "uid": "palisade-gpu",
+      "schemaVersion": 39,
+      "timezone": "utc",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "id": 1, "title": "GPU utilisation",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "nvidia_smi_utilization_gpu_ratio",
+            "legendFormat": "GPU util"}]
+        },
+        {
+          "id": 2, "title": "VRAM used / total",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "nvidia_smi_memory_used_bytes / nvidia_smi_memory_total_bytes",
+            "legendFormat": "VRAM fraction used"}]
+        },
+        {
+          "id": 3, "title": "vLLM request queue depth",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"},
+             "expr": "vllm:num_requests_running", "legendFormat": "running"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"},
+             "expr": "vllm:num_requests_waiting", "legendFormat": "waiting"}
+          ]
+        },
+        {
+          "id": 4, "title": "Completion tokens/sec",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "rate(palisade_tokens_total{direction=\"completion\"}[5m])",
+            "legendFormat": "tokens/sec"}]
+        }
+      ]
+    }

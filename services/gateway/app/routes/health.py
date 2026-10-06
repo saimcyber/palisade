@@ -27,7 +27,14 @@ async def healthz() -> dict[str, str]:
 @router.get("/readyz")
 async def readyz(request: Request, response: Response) -> dict[str, str]:
     client = request.app.state.http_client
-    if await check_ready(client):
-        return {"status": "ready"}
-    response.status_code = 503
-    return {"status": "not ready", "reason": "upstream unreachable"}
+    if not await check_ready(client):
+        response.status_code = 503
+        return {"status": "not ready", "reason": "upstream unreachable"}
+
+    try:
+        await request.app.state.redis.ping()
+    except Exception:  # noqa: BLE001 - any Redis failure means "not ready"
+        response.status_code = 503
+        return {"status": "not ready", "reason": "redis unreachable"}
+
+    return {"status": "ready"}

@@ -1,0 +1,8 @@
+# Plain directory sync (like deploy/policies) - no Helm here either. The
+# observability stack is four small, independently-chosen components
+# (docs/adr/0023), not one product with its own chart; templating four
+# unrelated Deployments would add machinery without reducing anything.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring

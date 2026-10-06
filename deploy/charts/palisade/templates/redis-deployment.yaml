@@ -1,0 +1,73 @@
+# Backs tenancy.py's rate-limit/budget counters and cache.py's response
+# cache (ADR 0021) - in-memory only, no PersistentVolumeClaim: losing this
+# data on a restart means every tenant's counters reset to zero, which is
+# an acceptable cold-start for a portfolio-scale platform and far simpler
+# than a PVC that would reintroduce the WaitForFirstConsumer sync-wave
+# deadlock ADR 0017 already fixed once for vLLM's cache.
+#
+# sync-wave 0, same as model-verify (ADR 0020 app-of-apps ordering still
+# governs policies-before-workloads at the Application level) - no
+# dependency between Redis and the model, so running in the same wave as
+# model-verify costs nothing and keeps the gateway (wave 2) correctly
+# waiting for both.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "palisade.labels" . | nindent 4 }}
+    app.kubernetes.io/name: redis
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        {{- include "palisade.labels" . | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The official image's "redis" user is 999 - same numeric value as
+        # .Values.uid, coincidentally; not shared on purpose the way
+        # model-verify/vLLM's uid is (they share an HF cache, this doesn't).
+        runAsUser: {{ .Values.uid }}
+        runAsGroup: {{ .Values.uid }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: data
+          emptyDir: {}
