@@ -5,6 +5,20 @@
 # Needs the same two things every GPU pod in this project needs -
 # runtimeClassName: nvidia and the cdi.k8s.io/gpu annotation - nothing
 # else about it is special.
+#
+# KNOWN LIMITATION, confirmed live and not yet resolved: this image ships
+# no shell and no /usr/bin at all (`docker run --entrypoint ls` on it
+# fails with "ls: executable file not found"). CDI's nvidia-ctk hook
+# injects nvidia-smi by symlinking it into /usr/bin inside the container -
+# which has nothing to land on here, unlike every other GPU pod in this
+# project, all of which use a full-filesystem base image. Pre-mounting an
+# emptyDir at /usr/bin was tried and did not fix it either (confirmed via
+# the pod's own logs before self-heal reverted the attempt) - the hook
+# still leaves nvidia-smi missing, for a reason not yet root-caused. The
+# pod runs and its `/metrics` endpoint is healthy (Prometheus target
+# shows `up`), but `nvidia_smi_last_collect_success` stays 0 and the GPU
+# & Model dashboard's two nvidia-smi panels have no data. vLLM's own
+# `/metrics` (queue depth, request counts) is unaffected and still real.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -96,6 +96,16 @@ one resource the restart-loop alert actually reads.
   metric names, not a Prometheus standard - if the GPU dashboard's panels
   come back empty, check the exporter's own `/metrics` output before
   assuming the dashboard is wrong.
+- **Confirmed live, not resolved**: the GPU exporter's own nvidia-smi
+  panels have no data. The target scrapes fine (Prometheus shows it
+  `up`), but the exporter's image has no shell and no `/usr/bin` for
+  CDI's symlink hook to inject `nvidia-smi` into - see the long comment
+  in `deploy/observability/gpu-exporter.yaml` for what was tried
+  (pre-mounting an emptyDir at `/usr/bin`, which did not fix it either)
+  and what's still unknown. vLLM's own `/metrics` is a different pod with
+  a full-filesystem base image and is unaffected - the GPU & Model
+  dashboard's queue-depth and request-count panels are real; only the
+  two nvidia-smi-sourced panels (utilization, VRAM) are not.
 - No Alertmanager means no deduplication, grouping, or silencing - five
   rules firing in a tight loop produces five separate alert states in
   Prometheus, not one grouped notification. Acceptable here; the first
