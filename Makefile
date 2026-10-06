@@ -26,7 +26,7 @@ else
 endif
 
 .PHONY: help doctor tools k3s-image up up-lite up-full down nuke gitops check-time \
-        gpu-cdi gpu-check cluster-info docs-export kubeconfig test lint fmt clean
+        gpu-cdi gpu-check cluster-info docs-export kubeconfig test test-alert-rules lint fmt clean
 
 # --- meta --------------------------------------------------------------------
 
@@ -117,6 +117,9 @@ test: ## Run the unit test suite (no GPU needed - the gateway's tests mock the u
 	if [ ! -d .venv ]; then python3 -m venv .venv; fi && \
 	.venv/bin/pip install -q --require-hashes -r requirements-dev.txt && \
 	.venv/bin/python -m pytest -q
+
+test-alert-rules: ## promtool test rules against the real alert rules - no cluster needed
+	@bash tests/prometheus/extract_and_test.sh
 
 lint: ## Lint everything that has a linter - exits non-zero on a finding, this is a gate
 	@pre-commit run --all-files

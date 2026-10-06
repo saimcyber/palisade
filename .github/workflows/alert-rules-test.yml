@@ -1,0 +1,32 @@
+# Behaviour-tests the Prometheus alert rules against synthetic input
+# series (tests/prometheus/) - needs no cluster and no GPU, so it runs on
+# every push/PR that could change what the rules say, the same promise
+# ci.yml makes for the gateway's own tests.
+name: alert-rules-test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/observability/prometheus-config.yaml"
+      - "tests/prometheus/**"
+      - ".github/workflows/alert-rules-test.yml"
+  pull_request:
+    paths:
+      - "deploy/observability/prometheus-config.yaml"
+      - "tests/prometheus/**"
+      - ".github/workflows/alert-rules-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  promtool-test-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: install pyyaml (to extract alerts.yaml from the ConfigMap)
+        run: pip install --quiet pyyaml
+
+      - run: bash tests/prometheus/extract_and_test.sh

@@ -69,6 +69,17 @@ fi
 # --- cluster -----------------------------------------------------------------
 if k3d cluster list 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER"; then
   ok "cluster '$CLUSTER' already exists"
+  # The cluster object can exist with its containers stopped - seen after a
+  # laptop restart, where Docker's own containers come back stopped but k3d's
+  # own state file still lists the cluster. `k3d cluster list`'s SERVERS
+  # column (e.g. "0/1") is 0 in that case; starting it is idempotent and fast
+  # when it's already running, so this is not worth a separate flag.
+  RUNNING="$(k3d cluster list "$CLUSTER" --no-headers 2>/dev/null | awk '{print $2}')"
+  if [ "${RUNNING%/*}" = "0" ]; then
+    note "cluster exists but its nodes are stopped - starting it"
+    k3d cluster start "$CLUSTER"
+    ok "cluster started"
+  fi
 else
   step "Creating k3d cluster '$CLUSTER' (profile: $PROFILE)"
   args=(
@@ -83,7 +94,20 @@ else
   if [ "$GPU_OK" = "1" ]; then
     args+=( --image "$K3S_IMAGE" --gpus all )
   fi
-  k3d "${args[@]}"
+  # Right after `make down` (which removes the cluster's Docker network),
+  # a brand-new `k3d cluster create` can race Docker's own network teardown
+  # and fail once with "network k3d-<cluster> not found", rolling itself
+  # back cleanly. Seen directly during the M4 clean-rebuild test - a single
+  # unconditional retry clears it; it does not reproduce a second time.
+  if ! k3d "${args[@]}" 2>&1 | tee /tmp/k3d-create.log; then
+    if grep -qi 'network .* not found' /tmp/k3d-create.log; then
+      note "transient Docker network race right after teardown - retrying once"
+      k3d "${args[@]}"
+    else
+      die "k3d cluster create failed - see output above"
+    fi
+  fi
+  rm -f /tmp/k3d-create.log
   ok "cluster created"
 fi
 

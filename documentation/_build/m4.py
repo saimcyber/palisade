@@ -10,10 +10,17 @@ SECTIONS = [
 ]
 
 REBUILD_RESULT = (
-    "**Passed from a clean rebuild.** `make down && make up && make gpu-check && make gitops` brought a "
-    "brand-new cluster to all six Applications Synced + Healthy - policies, secrets, the palisade chart, "
-    "the observability secret, and the observability stack itself, in that order - with no manual step "
-    "beyond the age key file. `tests/load/two-tenants.js` then passed against the freshly rebuilt cluster"
+    "**Passed from a clean rebuild**, with two gaps the rebuild itself found and closed. "
+    "`make down && make up && make gpu-check && make gitops` brought a brand-new cluster to all six "
+    "Applications Synced + Healthy - policies, secrets, the palisade chart, the observability secret, "
+    "and the observability stack itself, in that order. `tests/load/two-tenants.js` then passed for "
+    "real against the rebuilt cluster, re-run a second time after a Redis restart for a clean budget "
+    "state (tenant-a 100% success over 31 requests, tenant-b budget-exhausted 23 times) - "
+    "`docs/evidence/m4/08-two-tenants-k6-run-post-rebuild.txt`. The rebuild was not hands-free the "
+    "first time: `make up` hit a transient Docker network race right after `make down` and needed one "
+    "manual retry, and a cluster left stopped by a prior session needed `k3d cluster start` by hand. "
+    "Both are now in `scripts/cluster-up.sh` itself, per the project rule that a fix needed once belongs "
+    "in the script, not in a person's memory of what to type"
 )
 
 
@@ -216,7 +223,7 @@ def what_was_built(D):
             ["GPU & Model", "GPU utilisation / VRAM (nvidia-smi - see §6), vLLM's own queue depth, "
              "completion tokens/sec"],
             ["Cost & Tenancy", "Tokens/sec by tenant, budget remaining by tenant, budget-exhausted "
-             "rejections by tenant, cache hit rate"],
+             "rejections by tenant, cache hit rate, tokens saved by the cache"],
             ["Security", "Auth failures by reason, prompt-guard blocks by reason, rate-limited requests "
              "by tenant, Kyverno admission denials by rule"],
         ],
@@ -271,6 +278,15 @@ def how_it_was_done(D):
          "`tests/load/two-tenants.js` run for real against the rebuilt cluster with the two SOPS-encrypted "
          "demo keys; every Prometheus target and Grafana dashboard checked by hand; one alert "
          "(`PalisadeTenantBudgetExhausted`) deliberately triggered and confirmed firing."),
+        ("A second pass found four more gaps a first pass at 'done' had missed",
+         "The streaming path (M1's actual request shape) had never been exercised live - sent one for "
+         "real, read the audit line, both token counts non-zero and correct "
+         "(`docs/evidence/m4/07-streaming-live.txt`). Kyverno's signature policy covered the gateway and "
+         "model-verify but not the gpu-exporter image, in a different namespace - added a third rule, "
+         "confirmed the real signed image still gets admitted after a rollout restart. The Cost "
+         "dashboard was missing the one panel the plan explicitly promised ('tokens saved measured'). "
+         "And `promtool test rules` had no way to run itself - added `make test-alert-rules` and a CI "
+         "job that needs no cluster."),
     ])
     D.h2("5.1  The commands that matter")
     D.code(
@@ -416,6 +432,12 @@ def limitations(D):
             ["The prompt guard is keyword/regex-based", "Catches the textbook injection phrasing and "
              "nothing subtler - defence in depth, one layer among several, not a claim that prompt "
              "injection is solved (ADR 0022)"],
+            ["The gpu-exporter Kyverno rule has no tampered-image negative control",
+             "The gateway and model-verify rules each have one (M3's own evidence) proving the same "
+             "verification code path denies an unsigned image; this third rule uses that identical path "
+             "with a different `imageReferences` pattern. A real attempt was made and stopped when "
+             "`gh auth token` turned out not to carry `packages:write` - the same class of scope gap M2 "
+             "hit with the `workflow` scope, not chased further here"],
         ],
         widths=[2.6, 4.0],
         size=9.0,
