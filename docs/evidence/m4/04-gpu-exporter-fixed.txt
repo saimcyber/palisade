@@ -1,0 +1,50 @@
+GPU exporter fix - confirmed live via scratch pods (zero cost, see
+CLAUDE.md's "scratch-namespace testing" pattern - no CI run, no cluster
+disruption, immune to Argo CD self-heal reverting it)
+================================================================================
+
+Investigation, in order:
+
+1. Original image (utkuozdemir/nvidia_gpu_exporter:1.15.1): confirmed it
+   ships no shell and no /usr/bin at all.
+     $ docker run --rm --entrypoint ls utkuozdemir/nvidia_gpu_exporter:1.15.1 /
+     exec: "ls": executable file not found in $PATH
+
+2. Hypothesis: CDI's injection hook needs /usr/bin to exist. Rebuilt on
+   python:3.12-slim (full filesystem, same digest already trusted for the
+   gateway). Result: nvidia-smi STILL missing.
+     $ kubectl exec gpu-exporter-scratch-test -- which nvidia-smi
+     (nothing - not found)
+
+3. Diffed against the known-working k8s/gpu-check.yaml Job, which uses
+   nvidia/cuda:12.8.1-base-ubuntu24.04. That image sets
+   NVIDIA_DRIVER_CAPABILITIES by default; nothing else in this project
+   does. Added NVIDIA_VISIBLE_DEVICES=all and
+   NVIDIA_DRIVER_CAPABILITIES=utility to the same python:3.12-slim pod
+   (first via pod-spec env, to test without a rebuild):
+     $ kubectl exec gpu-exporter-scratch-test -- which nvidia-smi
+     /usr/bin/nvidia-smi
+     $ kubectl exec gpu-exporter-scratch-test -- nvidia-smi
+     [real nvidia-smi table output, RTX 3050, 2615MiB/4096MiB used]
+
+4. Baked the fix into docker/gpu-exporter/Dockerfile (ENV, not pod-spec,
+   so it travels with the image) and re-verified end to end, including
+   the exporter's own HTTP server:
+     $ kubectl exec gpu-exporter-scratch-test2 -- which nvidia-smi
+     /usr/bin/nvidia-smi
+     $ curl http://localhost:19836/metrics
+     nvidia_smi_last_collect_success 1
+     nvidia_smi_utilization_gpu_ratio{index="0"} 0.0000
+     nvidia_smi_memory_used_bytes{index="0"} 2742026240
+     nvidia_smi_memory_total_bytes{index="0"} 4294967296
+     nvidia_smi_temperature_celsius{index="0"} 47.0
+
+Trivy scan of the final image, matching CI's exact flags
+(--severity HIGH,CRITICAL --ignore-unfixed=false), with
+docker/gpu-exporter/.trivyignore applied: exit 0, clean.
+
+Root cause: nvidia-container-runtime's CDI hook only injects the
+"utility" driver capability (which carries nvidia-smi and the NVML
+libraries) when NVIDIA_DRIVER_CAPABILITIES says to request it. The
+missing filesystem (step 2) was a real, separate problem - both fixes
+were necessary, neither was sufficient alone.

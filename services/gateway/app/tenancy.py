@@ -77,14 +77,6 @@ class Tenant:
     token_budget: int
 
 
-class BudgetExceeded(Exception):
-    pass
-
-
-class RateLimited(Exception):
-    pass
-
-
 def load_tenants() -> dict[str, Tenant]:
     """Parses PALISADE_TENANTS; empty/unset means no tenants can authenticate."""
     raw = settings.tenants.strip()

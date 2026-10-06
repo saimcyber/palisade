@@ -4,14 +4,17 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M3 — the cluster enforces the rules itself.** Argo CD deploys from
-> git (a push is the deployment; hand edits are reverted), and Kyverno refuses
-> any `ghcr.io/saimcyber/*` image not signed by this repo's own CI identity —
-> [recorded refusal](docs/evidence/m3/03-unsigned-image-refused.txt). Every pod
-> runs non-root on a read-only filesystem, the model server has no network
-> egress at all, model weights are checked against a signed SHA-256 manifest
-> before vLLM starts, and the one secret is SOPS/age-encrypted in git. Next: M4,
-> multi-tenancy and observability.
+> Status: **M4 — multi-tenant, metered, and watched.** Per-tenant token
+> budgets and rate limits (Redis-backed, atomic reservation) sit in front of
+> every request, alongside a response cache and a prompt guard. Two tenants
+> sending real traffic diverge exactly as designed — one exhausted its budget
+> and got `429`s while the other stayed unaffected —
+> [recorded run](docs/evidence/m4/01-two-tenants-k6-run.txt). Prometheus,
+> Grafana (four dashboards) and five alert rules run as their own
+> Argo-CD-managed stack, deliberately unable to block the gateway or vLLM if
+> something in it breaks. Everything from M3 — Argo CD deploys from git,
+> Kyverno refuses unsigned images, no egress from vLLM — still holds. Next:
+> M5, resilience and proof.
 
 ---
 
