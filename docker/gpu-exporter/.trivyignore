@@ -1,0 +1,14 @@
+# Reviewed, accepted-risk findings only - per docs/adr/0010. Identical
+# list to services/gateway/.trivyignore's base-OS section: same
+# python:3.12-slim digest, confirmed by a real scan of this exact image
+# before writing this file. None are in a code path this container
+# (subprocess + http.server, non-root, no mount/cgroup capabilities,
+# listens only on 127.0.0.1-reachable 9835) ever exercises.
+CVE-2025-69720
+CVE-2026-16742
+CVE-2026-54369
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
+CVE-2026-9538

@@ -1,0 +1,26 @@
+M4 clean rebuild - make down && make up && make gpu-check && make gitops
+===========================================================================
+
+All six Argo CD Applications reached Synced + Healthy with no manual step
+beyond the age key file at ~/.config/palisade/age.key:
+
+NAME                              SYNC STATUS   HEALTH STATUS
+palisade                         Synced        Healthy
+palisade-observability           Synced        Healthy
+palisade-observability-secrets   Synced        Healthy
+palisade-policies                Synced        Healthy
+palisade-secrets                 Synced        Healthy
+root                              Synced        Healthy
+
+Pods in palisade namespace: model-verify Completed, redis Running,
+vllm Running, palisade-gateway Running.
+
+Pods in monitoring namespace: gpu-exporter, grafana, kube-state-metrics,
+prometheus all Running.
+
+make gpu-check passed (M0 acceptance): the scheduler placed a pod that
+can see and drive the RTX 3050 via CDI.
+
+This confirms M4's additions (Redis, the observability stack, the two
+new Argo CD Applications and their sync-wave ordering) are reproducible
+from a fully torn-down cluster, not just an incrementally-patched one.

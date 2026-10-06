@@ -1,0 +1,111 @@
+# promtool test rules tests/prometheus/rules_test.yaml
+#
+# rule_files below points at alerts.generated.yaml, extracted from
+# deploy/observability/prometheus-config.yaml's ConfigMap by
+# extract_and_test.sh - that ConfigMap stays the one source of truth for
+# the actual rules; this file never duplicates them, only tests them
+# against synthetic input series.
+rule_files:
+  - alerts.generated.yaml
+evaluation_interval: 1m
+
+tests:
+  # --- PalisadeTenantBudgetExhausted --------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'palisade_budget_rejected_total{tenant="tenant-b"}'
+        values: "0 0 1 3"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: PalisadeTenantBudgetExhausted
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: PalisadeTenantBudgetExhausted
+        exp_alerts:
+          - exp_labels:
+              tenant: tenant-b
+              severity: info
+            exp_annotations:
+              summary: "A tenant hit its token budget - tenant-b"
+
+  # --- PalisadeRestartLoop -------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="palisade",pod="palisade-gateway-abc"}'
+        values: "0 0 1 2 3 4 5"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PalisadeRestartLoop
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PalisadeRestartLoop
+        exp_alerts:
+          - exp_labels:
+              namespace: palisade
+              pod: palisade-gateway-abc
+              severity: page
+            exp_annotations:
+              summary: "palisade-gateway-abc restarted more than 3 times in 15 minutes"
+
+  # --- PalisadeInjectionBlockSpike -----------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'palisade_prompt_guard_blocks_total{reason="injection_suspected"}'
+        values: "0 0 2 4 6 8"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PalisadeInjectionBlockSpike
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: PalisadeInjectionBlockSpike
+        exp_alerts:
+          - exp_labels:
+              reason: injection_suspected
+              severity: warn
+            exp_annotations:
+              summary: "More than 5 suspected prompt-injection attempts in 5 minutes"
+
+  # --- PalisadeGPUSaturated (sustained-for duration, and a negative case) -
+  - interval: 1m
+    input_series:
+      - series: "nvidia_smi_utilization_gpu_ratio"
+        values: "0.97+0x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PalisadeGPUSaturated
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: PalisadeGPUSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "GPU utilisation over 95% for 10 minutes - requests may be queueing"
+
+  - interval: 1m
+    input_series:
+      - series: "nvidia_smi_utilization_gpu_ratio"
+        values: "0.40+0x15"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PalisadeGPUSaturated
+        exp_alerts: []
+
+  # --- PalisadeSLOBurnRateHigh ---------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="200",method="POST"}'
+        values: "0+2x6"
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="500",method="POST"}'
+        values: "0+1x6"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PalisadeSLOBurnRateHigh
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PalisadeSLOBurnRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: "Chat completion error rate over 5% for 5 minutes"

@@ -18,7 +18,7 @@ whether or not Kubernetes is already familiar.
 | M1 — Inference service | [`M1-Inference-Service.docx`](M1-Inference-Service.docx) | Complete |
 | M2 — Supply chain & CI/CD | [`M2-Supply-Chain-CICD.docx`](M2-Supply-Chain-CICD.docx) | Complete |
 | M3 — Kubernetes, GitOps & policy | [`M3-Kubernetes-GitOps-Policy.docx`](M3-Kubernetes-GitOps-Policy.docx) | Complete |
-| M4 — Platform & observability | `M4-Platform-Observability.docx` | Pending |
+| M4 — Platform & observability | [`M4-Platform-Observability.docx`](M4-Platform-Observability.docx) | Complete |
 | M5 — Resilience & proof | `M5-Resilience-Proof.docx` | Pending |
 
 ## Structure of each document

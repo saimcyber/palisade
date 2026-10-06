@@ -25,12 +25,27 @@ handful of ConfigMaps is less total YAML than one Operator's CRDs, and —
 unlike the chart — keeps every dashboard and alert rule a plain,
 diffable file in Git rather than a Helm value.
 
-**GPU exporter: a `nvidia-smi` wrapper (`utkuozdemir/nvidia_gpu_exporter`),
-not `dcgm-exporter`.** The NVIDIA device plugin cannot work under WSL2
-(ADR 0002) because it depends on NVML against `/dev/dxg`; `dcgm-exporter`
-sits on the identical NVML layer and would hit the identical wall. A pod
-that calls `nvidia-smi` through the already-proven CDI path (`make
-gpu-check`) has no such dependency.
+**GPU exporter: a `nvidia-smi` wrapper, not `dcgm-exporter`.** The NVIDIA
+device plugin cannot work under WSL2 (ADR 0002) because it depends on
+NVML against `/dev/dxg`; `dcgm-exporter` sits on the identical NVML layer
+and would hit the identical wall. A pod that calls `nvidia-smi` through
+the already-proven CDI path (`make gpu-check`) has no such dependency.
+
+The third-party `utkuozdemir/nvidia_gpu_exporter` was tried first and
+replaced with a project-built one (`docker/gpu-exporter/` - a few dozen
+lines of `subprocess` + `http.server`, no dependencies) after two
+confirmed-live findings: that image ships no shell and no `/usr/bin` for
+CDI's injection hook to write `nvidia-smi` into, and - the part a
+full-filesystem rebuild alone didn't fix - `nvidia-container-runtime`'s
+hook only injects the "utility" driver capability (which carries
+`nvidia-smi`) when `NVIDIA_DRIVER_CAPABILITIES` says to. `nvidia/cuda`-
+based images (`k8s/gpu-check.yaml`'s image, for instance) set that by
+default; nothing else does. The project's own exporter sets it
+explicitly, is built on the same `python:3.12-slim` digest already
+trusted for the gateway, and is built, scanned, signed and pushed by its
+own workflow (`gpu-exporter-image.yml`), the same pipeline shape as every
+other image in this project rather than an unverified pull from Docker
+Hub.
 
 **No PersistentVolumeClaim on Prometheus.** A 6-hour retention window on an
 `emptyDir` is enough to drive four live dashboards and evaluate alert
@@ -39,10 +54,13 @@ milestone needs, and a PVC here would re-open the exact
 `WaitForFirstConsumer` sync-wave question ADR 0017 already closed once.
 
 **No Alertmanager deployed.** The five rules in `prometheus-config.yaml`'s
-`alerts.yaml` are real and `promtool check rules`-verified (syntax and
-expression validity, not a unit test against sample input series - that's
-a gap a future milestone could close with `promtool test rules`), but this
-portfolio-scale platform has no on-call pager for them to page - running
+`alerts.yaml` are real: `promtool check rules`-verified for syntax, and
+behaviour-tested against synthetic input series with `promtool test rules`
+(`tests/prometheus/`, run via `extract_and_test.sh`, which extracts the
+ConfigMap's own `alerts.yaml` rather than keeping a second copy of it) -
+covering every rule's firing path, plus explicit negative cases for the
+two `for:`-qualified ones. This portfolio-scale platform still has no
+on-call pager for them to page, though - running
 Alertmanager with no real receiver configured would be theatre. The rules
 fire and are visible in Prometheus's own `/alerts` page; wiring a receiver
 (Slack, email, PagerDuty) is a config change to this one component, not an
@@ -96,16 +114,15 @@ one resource the restart-loop alert actually reads.
   metric names, not a Prometheus standard - if the GPU dashboard's panels
   come back empty, check the exporter's own `/metrics` output before
   assuming the dashboard is wrong.
-- **Confirmed live, not resolved**: the GPU exporter's own nvidia-smi
-  panels have no data. The target scrapes fine (Prometheus shows it
-  `up`), but the exporter's image has no shell and no `/usr/bin` for
-  CDI's symlink hook to inject `nvidia-smi` into - see the long comment
-  in `deploy/observability/gpu-exporter.yaml` for what was tried
-  (pre-mounting an emptyDir at `/usr/bin`, which did not fix it either)
-  and what's still unknown. vLLM's own `/metrics` is a different pod with
-  a full-filesystem base image and is unaffected - the GPU & Model
-  dashboard's queue-depth and request-count panels are real; only the
-  two nvidia-smi-sourced panels (utilization, VRAM) are not.
+- **Fixed and confirmed live**: the GPU exporter's nvidia-smi panels now
+  populate (`nvidia_smi_last_collect_success` is `1`, real utilisation/
+  VRAM/temperature values observed). Took two fixes, not one - a
+  full-filesystem base image (necessary, since the original image had
+  nowhere for the injection hook to write) and `NVIDIA_DRIVER_CAPABILITIES
+  =utility` (the actual trigger for the hook to inject `nvidia-smi` at
+  all) - see the Dockerfile's header in `docker/gpu-exporter/` for the
+  full investigation and what was tried and disproved before the real
+  cause was found by diffing against the known-working `gpu-check` Job.
 - No Alertmanager means no deduplication, grouping, or silencing - five
   rules firing in a tight loop produces five separate alert states in
   Prometheus, not one grouped notification. Acceptable here; the first

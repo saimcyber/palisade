@@ -39,6 +39,11 @@ kubeconfig.*
 charts/**/charts/
 *.tgz
 
+# --- generated test fixtures ---------------------------------------------------
+# Extracted from deploy/observability/prometheus-config.yaml's ConfigMap by
+# tests/prometheus/extract_and_test.sh - never a second source of truth.
+tests/prometheus/alerts.generated.yaml
+
 # --- artefacts ----------------------------------------------------------------
 sbom/
 *.sbom.json
