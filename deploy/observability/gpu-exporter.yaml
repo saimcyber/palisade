@@ -1,0 +1,62 @@
+# The actual GPU exporter decision (ADR 0023): the NVIDIA device plugin
+# cannot work under WSL2 (ADR 0002), and the same NVML gap rules out
+# dcgm-exporter - it sits on the identical layer. This wraps `nvidia-smi`
+# instead, which is already proven to work in a CDI pod (make gpu-check).
+# Needs the same two things every GPU pod in this project needs -
+# runtimeClassName: nvidia and the cdi.k8s.io/gpu annotation - nothing
+# else about it is special.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: gpu-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gpu-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gpu-exporter
+      annotations:
+        cdi.k8s.io/gpu: "nvidia.com/gpu=all"
+    spec:
+      runtimeClassName: nvidia
+      enableServiceLinks: false
+      containers:
+        - name: gpu-exporter
+          # Verified against the project's Docker Hub tag list before
+          # pinning (project rule).
+          image: utkuozdemir/nvidia_gpu_exporter:1.15.1
+          ports:
+            - name: metrics
+              containerPort: 9835
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: gpu-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: gpu-exporter
+  ports:
+    - name: metrics
+      port: 9835
+      targetPort: metrics

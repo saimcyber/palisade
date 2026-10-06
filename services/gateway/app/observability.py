@@ -14,7 +14,7 @@ import time
 import uuid
 from contextvars import ContextVar
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from .config import settings
 
@@ -47,6 +47,48 @@ tokens_total = Counter(
     "palisade_tokens_total",
     "Tokens observed, by direction",
     ["direction"],  # prompt | completion
+)
+
+# Tenant-labelled: the cardinality is bounded by the number of tenants
+# (small, operator-provisioned), which is what makes a per-tenant label
+# safe here where it would not be on, say, a path or user-agent.
+tenant_tokens_total = Counter(
+    "palisade_tenant_tokens_total",
+    "Tokens billed to a tenant's budget, by direction",
+    ["tenant", "direction"],  # prompt | completion
+)
+
+tenant_budget_remaining = Gauge(
+    "palisade_tenant_budget_remaining",
+    "Tokens left in the tenant's current budget window",
+    ["tenant"],
+)
+
+rate_limited_total = Counter(
+    "palisade_rate_limited_total",
+    "Requests rejected for exceeding the per-tenant rate limit",
+    ["tenant"],
+)
+
+budget_rejected_total = Counter(
+    "palisade_budget_rejected_total",
+    "Requests rejected for exceeding the tenant's token budget",
+    ["tenant"],
+)
+
+cache_hits_total = Counter("palisade_cache_hits_total", "Response cache hits")
+
+cache_misses_total = Counter("palisade_cache_misses_total", "Response cache misses")
+
+cache_tokens_saved_total = Counter(
+    "palisade_cache_tokens_saved_total",
+    "Tokens a cache hit served without a GPU generation - the cached response's own usage",
+)
+
+prompt_guard_blocks_total = Counter(
+    "palisade_prompt_guard_blocks_total",
+    "Requests the input guard blocked or modified, by reason",
+    ["reason"],  # length_exceeded | injection_suspected | pii_redacted
 )
 
 upstream_errors_total = Counter(

@@ -1,0 +1,78 @@
+# Static scrape targets, not Kubernetes service-discovery - this cluster
+# has five fixed targets that never change shape, so kubernetes_sd_configs
+# (and the ClusterRole Prometheus would then need to list/watch services
+# and endpoints cluster-wide) buys nothing here. kube-state-metrics.yaml
+# needed its own narrow RBAC because it alone translates k8s API state
+# into metrics; Prometheus itself never talks to the API.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    rule_files:
+      - /etc/prometheus/alerts.yaml
+    scrape_configs:
+      - job_name: palisade-gateway
+        static_configs:
+          - targets: ["palisade-gateway.palisade.svc:8080"]
+      - job_name: vllm
+        static_configs:
+          - targets: ["vllm.palisade.svc:8000"]
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics.monitoring.svc:8080"]
+      - job_name: gpu-exporter
+        static_configs:
+          - targets: ["gpu-exporter.monitoring.svc:9835"]
+      - job_name: kyverno
+        static_configs:
+          - targets: ["kyverno-svc-metrics.kyverno.svc:8000"]
+  alerts.yaml: |
+    groups:
+      - name: palisade
+        rules:
+          - alert: PalisadeSLOBurnRateHigh
+            expr: >-
+              sum(rate(palisade_http_requests_total{route="/v1/chat/completions",status=~"5.."}[5m]))
+              /
+              sum(rate(palisade_http_requests_total{route="/v1/chat/completions"}[5m]))
+              > 0.05
+            for: 5m
+            labels:
+              severity: page
+            annotations:
+              summary: "Chat completion error rate over 5% for 5 minutes"
+
+          - alert: PalisadeGPUSaturated
+            expr: nvidia_smi_utilization_gpu_ratio > 0.95
+            for: 10m
+            labels:
+              severity: warn
+            annotations:
+              summary: "GPU utilisation over 95% for 10 minutes - requests may be queueing"
+
+          - alert: PalisadeTenantBudgetExhausted
+            expr: increase(palisade_budget_rejected_total[5m]) > 0
+            labels:
+              severity: info
+            annotations:
+              summary: "A tenant hit its token budget - {{ $labels.tenant }}"
+
+          - alert: PalisadeInjectionBlockSpike
+            expr: increase(palisade_prompt_guard_blocks_total{reason="injection_suspected"}[5m]) > 5
+            labels:
+              severity: warn
+            annotations:
+              summary: "More than 5 suspected prompt-injection attempts in 5 minutes"
+
+          - alert: PalisadeRestartLoop
+            expr: increase(kube_pod_container_status_restarts_total{namespace="palisade"}[15m]) > 3
+            labels:
+              severity: page
+            annotations:
+              summary: "{{ $labels.pod }} restarted more than 3 times in 15 minutes"

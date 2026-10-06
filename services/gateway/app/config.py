@@ -1,8 +1,10 @@
 """Gateway configuration - all env-driven, nothing hardcoded.
 
-M1 loads API keys from an env var (see auth.py for why only their hashes are
-kept in memory). M4 moves key storage to Redis; this module's shape does not
-need to change for that - only where auth.py looks the hash up.
+M1 loaded API keys from a flat list of hashes. M4 (docs/adr/0021) replaces
+that with `tenants_json`: the same hashes, now carrying a name, a rate
+limit and a token budget - the static facts about a tenant. The mutable
+state (requests this minute, tokens used this window) lives in Redis,
+reached at `redis_url`.
 """
 
 from __future__ import annotations
@@ -25,9 +27,34 @@ class Settings(BaseSettings):
     # k8s/vllm.yaml and the compose file.
     served_model_name: str = "palisade-small"
 
-    # Comma-separated SHA-256 hashes of accepted API keys, loaded from env
-    # rather than committed anywhere. auth.py never sees or stores a raw key.
-    api_key_hashes: str = ""
+    # JSON object: {"<sha256 of the key>": {"name": ..., "rate_limit_per_minute": ...,
+    # "token_budget": ...}}. Loaded from env (sourced from a SOPS-encrypted
+    # secret, never committed in plaintext). auth.py never sees or stores a
+    # raw key - only this map of accepted hashes to tenant facts.
+    tenants: str = ""
+    default_rate_limit_per_minute: int = 60
+    default_token_budget: int = 20_000
+
+    # Where the per-tenant rate-limit and budget counters, and the response
+    # cache, live - see tenancy.py and cache.py. Required at runtime; no
+    # default pointing at localhost, since a missing Redis must fail
+    # loudly rather than silently run with no budgets enforced.
+    redis_url: str = "redis://redis:6379/0"
+
+    # Token budgets are a rolling window, not a lifetime cap - see
+    # tenancy.py's module docstring for why this is exempt from the
+    # no-time-references rule.
+    budget_window_seconds: int = 86_400
+
+    # Crude chars-per-token estimate used only for the pre-flight budget
+    # check, before real usage numbers exist - a rough guard, not a
+    # guaranteed overestimate; see policy.estimate_tokens's docstring for
+    # the known case where it can undershoot.
+    estimate_chars_per_token: float = 3.0
+
+    response_cache_ttl_seconds: int = 300
+
+    max_prompt_chars: int = 8_000
 
     # Server-side clamps - see policy.py. A caller can ask for less, never
     # more.

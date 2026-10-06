@@ -40,4 +40,43 @@ def apply_policy(body: dict[str, Any]) -> dict[str, Any]:
     kwargs.setdefault("enable_thinking", settings.default_enable_thinking)
     body["chat_template_kwargs"] = kwargs
 
+    # Token-budget reconciliation (tenancy.py) needs real usage numbers even
+    # on the streaming path. vLLM only emits a final usage-bearing chunk if
+    # asked - forced on here, regardless of what the caller sent.
+    if body.get("stream"):
+        stream_options = dict(body.get("stream_options") or {})
+        stream_options["include_usage"] = True
+        body["stream_options"] = stream_options
+
     return body
+
+
+def estimate_tokens(body: dict[str, Any]) -> int:
+    """Pre-flight token estimate, before any real usage exists.
+
+    Deliberately crude (chars / estimate_chars_per_token, plus a fixed
+    per-message overhead for the chat template's own wrapper tokens and
+    the role markers) - this only gates whether a reservation is allowed,
+    and the reconciliation step in chat.py corrects it to the real number
+    as soon as one exists.
+
+    This is a rough estimate, not a guaranteed overestimate: a prompt
+    whose real tokenisation is denser than estimate_chars_per_token
+    assumes (e.g. a lot of non-English text or code) can still reserve
+    less than it actually uses, and the uncapped INCRBY in
+    tenancy.reserve_budget means a tenant can end a window slightly over
+    its nominal budget rather than being blocked exactly at it. Stated
+    here as a known limitation, not fixed for this milestone - closing it
+    exactly would need the same tokenizer vLLM uses, which is a real
+    dependency for a number that only has to be approximately right.
+    """
+    message_overhead_tokens = 4  # role marker + template wrapper, per message
+    messages = [m for m in body.get("messages", []) if isinstance(m, dict)]
+    text_chars = sum(len(str(m.get("content", ""))) for m in messages)
+    prompt_estimate = (
+        int(text_chars / settings.estimate_chars_per_token)
+        + len(messages) * message_overhead_tokens
+        + 1
+    )
+    completion_ceiling = body.get("max_tokens") or settings.max_tokens_ceiling
+    return prompt_estimate + completion_ceiling

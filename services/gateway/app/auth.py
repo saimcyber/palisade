@@ -6,36 +6,31 @@ usable credential, only hashes. Keys are of the form `plsd_<random>`; the
 prefix is cosmetic (helps a human or a secret scanner spot one) and carries
 no meaning to the gateway itself.
 
-M1: hashes come from a single env var, loaded once at startup - fine for one
-operator. M4 moves the lookup to Redis so keys can be issued/revoked without
-a redeploy; nothing above this module (routes, tests) needs to change for
-that, only the body of `authenticate`.
+The accepted hash -> Tenant map is built once at startup (app.state.tenants,
+from tenancy.load_tenants()) and looked up here; it is never mutated at
+request time. The things that change per request - rate limit counters,
+budget usage - live in Redis and are checked later, in chat.py, once we
+know which Tenant this is.
 """
 
 from __future__ import annotations
 
 import hashlib
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
-from .config import settings
 from .observability import auth_failures_total
+from .tenancy import Tenant
 
 
 def _hash(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
-def _accepted_hashes() -> set[str]:
-    return {h.strip() for h in settings.api_key_hashes.split(",") if h.strip()}
-
-
-async def authenticate(authorization: str | None = Header(default=None)) -> str:
-    """FastAPI dependency: returns the key's hash (used as a tenant id) or 401s.
-
-    The hash - not the raw key - is what callers get back as their identity,
-    since the raw key is never retained past this function.
-    """
+async def authenticate(
+    request: Request, authorization: str | None = Header(default=None)
+) -> Tenant:
+    """FastAPI dependency: returns the caller's Tenant or 401s."""
     if authorization is None or not authorization.startswith("Bearer "):
         auth_failures_total.labels(reason="missing_header").inc()
         raise HTTPException(
@@ -52,10 +47,11 @@ async def authenticate(authorization: str | None = Header(default=None)) -> str:
         )
 
     key_hash = _hash(raw_key)
-    if key_hash not in _accepted_hashes():
+    tenant = request.app.state.tenants.get(key_hash)
+    if tenant is None:
         auth_failures_total.labels(reason="unknown_key").inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
         )
 
-    return key_hash
+    return tenant

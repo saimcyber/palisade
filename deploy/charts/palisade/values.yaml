@@ -34,10 +34,31 @@ gateway:
     servedModelName: palisade-small
     maxTokensCeiling: 512
     logLevel: INFO
+    defaultRateLimitPerMinute: 60
+    defaultTokenBudget: 20000
+    budgetWindowSeconds: 86400
+    responseCacheTtlSeconds: 300
   # The one real secret this chart needs (auth.py never sees a raw key,
-  # only accepted hashes - ADR 0015 covers how this gets to the cluster
-  # without ever being a plaintext value in git).
-  apiKeyHashesSecretName: palisade-gateway-secret
+  # only accepted hashes, plus each tenant's name/rate-limit/budget -
+  # ADR 0015 covers how this gets to the cluster without ever being a
+  # plaintext value in git; ADR 0021 covers why it's a secret, not Redis).
+  tenantsSecretName: palisade-gateway-secret
+
+redis:
+  image:
+    repository: redis
+    # Verified against Docker Hub's tag list before pinning (project rule)
+    # - same tag-only precedent as vllm.image above; Kyverno's signature
+    # check is scoped to ghcr.io/saimcyber/* only (ADR 0013), so this
+    # third-party image is outside what it verifies either way.
+    tag: 7.4.11-alpine
+  port: 6379
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 
 vllm:
   image:

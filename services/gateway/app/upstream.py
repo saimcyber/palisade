@@ -17,11 +17,7 @@ from typing import Any
 import httpx
 
 from .config import settings
-from .observability import (
-    time_to_first_token_seconds,
-    tokens_total,
-    upstream_errors_total,
-)
+from .observability import time_to_first_token_seconds, upstream_errors_total
 
 logger = logging.getLogger("palisade.upstream")
 
@@ -54,9 +50,9 @@ async def check_ready(client: httpx.AsyncClient) -> bool:
         return False
 
 
-async def list_models(client: httpx.AsyncClient) -> dict[str, Any]:
+async def list_models(client: httpx.AsyncClient, request_id: str) -> dict[str, Any]:
     try:
-        response = await client.get("/v1/models")
+        response = await client.get("/v1/models", headers={"X-Request-ID": request_id})
         response.raise_for_status()
         return response.json()
     except httpx.ConnectError as exc:
@@ -71,11 +67,13 @@ async def list_models(client: httpx.AsyncClient) -> dict[str, Any]:
 
 
 async def chat_completion(
-    client: httpx.AsyncClient, body: dict[str, Any]
+    client: httpx.AsyncClient, body: dict[str, Any], request_id: str
 ) -> dict[str, Any]:
     """Non-streaming path."""
     try:
-        response = await client.post("/v1/chat/completions", json=body)
+        response = await client.post(
+            "/v1/chat/completions", json=body, headers={"X-Request-ID": request_id}
+        )
         response.raise_for_status()
     except httpx.ConnectError as exc:
         upstream_errors_total.labels(kind="connect").inc()
@@ -87,30 +85,42 @@ async def chat_completion(
         upstream_errors_total.labels(kind="http_status").inc()
         raise UpstreamError(exc.response.status_code, exc.response.text) from exc
 
-    data = response.json()
-    usage = data.get("usage") or {}
-    if "prompt_tokens" in usage:
-        tokens_total.labels(direction="prompt").inc(usage["prompt_tokens"])
-    if "completion_tokens" in usage:
-        tokens_total.labels(direction="completion").inc(usage["completion_tokens"])
-    return data
+    # tokens_total/tenant_tokens_total are recorded by chat.py's
+    # _record_usage, not here - that's the one place that knows whether
+    # this usage came from a real generation or a cache hit (ADR 0021),
+    # which is exactly the distinction that metric needs to preserve.
+    return response.json()
 
 
 async def stream_chat_completion(
-    client: httpx.AsyncClient, body: dict[str, Any], request_start: float
-) -> AsyncIterator[bytes]:
+    client: httpx.AsyncClient,
+    body: dict[str, Any],
+    request_start: float,
+    request_id: str,
+) -> AsyncIterator[tuple[bytes, dict[str, Any] | None]]:
     """Streaming path: relays raw SSE lines through unmodified and unbuffered.
 
     TTFT is measured here, at the first non-empty chunk received from the
     upstream - not at connection open, which would understate it, and not
     at first byte written to the client, which this process does not
     control precisely enough to matter.
+
+    Each item is (line_bytes, usage). `usage` is None for every chunk
+    except the final one - policy.apply_policy forces
+    `stream_options.include_usage`, so vLLM's last data chunk before
+    `[DONE]` carries real prompt/completion token counts, which chat.py
+    uses to reconcile the pre-flight budget reservation against the
+    tenant's actual usage.
     """
     first_token_seen = False
-    completion_tokens = 0
 
     try:
-        async with client.stream("POST", "/v1/chat/completions", json=body) as response:
+        async with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            json=body,
+            headers={"X-Request-ID": request_id},
+        ) as response:
             if response.status_code != 200:
                 error_body = await response.aread()
                 upstream_errors_total.labels(kind="http_status").inc()
@@ -121,31 +131,24 @@ async def stream_chat_completion(
             async for line in response.aiter_lines():
                 if not line:
                     continue
-                if (
-                    not first_token_seen
-                    and line.startswith("data:")
-                    and line.strip() != "data: [DONE]"
-                ):
-                    time_to_first_token_seconds.observe(
-                        time.monotonic() - request_start
-                    )
-                    first_token_seen = True
+                usage = None
                 if line.startswith("data:") and line.strip() != "data: [DONE]":
+                    if not first_token_seen:
+                        time_to_first_token_seconds.observe(
+                            time.monotonic() - request_start
+                        )
+                        first_token_seen = True
                     payload = line.removeprefix("data:").strip()
                     try:
                         chunk = json.loads(payload)
-                        for choice in chunk.get("choices", []):
-                            if choice.get("delta", {}).get("content"):
-                                completion_tokens += 1
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
                     except json.JSONDecodeError:
                         pass
-                yield (line + "\n\n").encode("utf-8")
+                yield (line + "\n\n").encode("utf-8"), usage
     except httpx.ConnectError as exc:
         upstream_errors_total.labels(kind="connect").inc()
         raise UpstreamError(503, "Upstream model server unreachable") from exc
     except httpx.TimeoutException as exc:
         upstream_errors_total.labels(kind="timeout").inc()
         raise UpstreamError(504, "Upstream model server timed out") from exc
-    finally:
-        if completion_tokens:
-            tokens_total.labels(direction="completion").inc(completion_tokens)

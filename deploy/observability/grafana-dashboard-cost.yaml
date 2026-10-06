@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-cost
+  namespace: monitoring
+  labels:
+    grafana-dashboard: "true"
+data:
+  cost.json: |
+    {
+      "title": "Palisade / Cost & Tenancy",
+      "uid": "palisade-cost",
+      "schemaVersion": 39,
+      "timezone": "utc",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "id": 1, "title": "Tokens/sec by tenant",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "sum(rate(palisade_tenant_tokens_total[5m])) by (tenant)",
+            "legendFormat": "{{tenant}}"}]
+        },
+        {
+          "id": 2, "title": "Budget remaining by tenant",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "palisade_tenant_budget_remaining",
+            "legendFormat": "{{tenant}}"}]
+        },
+        {
+          "id": 3, "title": "Budget-exhausted rejections by tenant",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "sum(increase(palisade_budget_rejected_total[1h])) by (tenant)",
+            "legendFormat": "{{tenant}}"}]
+        },
+        {
+          "id": 4, "title": "Response cache hit rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
+            "expr": "rate(palisade_cache_hits_total[5m]) / (rate(palisade_cache_hits_total[5m]) + rate(palisade_cache_misses_total[5m]))",
+            "legendFormat": "hit rate"}]
+        }
+      ]
+    }
