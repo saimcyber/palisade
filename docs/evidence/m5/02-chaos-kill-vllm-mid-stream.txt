@@ -52,3 +52,26 @@ httpx.RemoteProtocolError: peer closed connection without sending complete messa
   File "/app/app/upstream.py", line 131, in stream_chat_completion
     async for line in response.aiter_lines():
 INFO:     10.42.0.1:33390 - "GET /readyz HTTP/1.1" 503 Service Unavailable
+
+=== re-run after the fix was built, signed, and rolled out to the live
+cluster (gateway digest sha256:f1ef281b...549a0) ===
+
+Identical scenario - a streaming request, vLLM pod deleted mid-stream.
+The client now receives a proper SSE error event instead of a silent
+truncation:
+
+  data: {"id":"chatcmpl-3d105eae...","object":"chat.completion.chunk",...,"delta":{"content":". B"},...}
+
+  data: {"error": "Upstream model server disconnected mid-response"}
+
+And the audit log now correctly reports the failure instead of a false
+"ok":
+
+  {"level": "INFO", "logger": "palisade.chat", "message": "chat_completion_settled",
+   "request_id": "3d105eae53844f5194c073dfaa89af10", "tenant": "tenant-a",
+   "outcome": "upstream_error", "status": 502, "cache_hit": false,
+   "prompt_tokens": 0, "completion_tokens": 0, "duration_ms": 32096.3}
+
+vLLM recovered on its own again, same as before the fix - this change
+only corrects what the gateway reports about the failure, not vLLM's
+own recovery behavior.

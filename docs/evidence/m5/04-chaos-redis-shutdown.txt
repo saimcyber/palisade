@@ -3,8 +3,9 @@ chaos-hypotheses.md)
 
 Result: the hypothesis's main prediction (clean 503, no data loss on
 the request path) was right about /readyz and wrong, in an interesting
-way, about data loss. The documented assumption going into M5 (ADR
-0023: "Redis has no PersistentVolumeClaim... a restart resets every
+way, about data loss. The documented assumption going into M5 (the
+redis-deployment.yaml header comment and M4's own limitations table:
+"Redis has no PersistentVolumeClaim... a restart resets every
 rate-limit window and budget counter to zero") turned out to be true
 only for a pod-level reschedule, not for the much more common case of
 a container restarting in place within the same pod.
@@ -33,10 +34,10 @@ stock image still runs its default periodic background saves (the
 before this experiment even started:
 
   $ kubectl get pods -n palisade -l app.kubernetes.io/name=redis
-  redis-596b6d8fdc-8l6dj   1/1   Running   2 (27s ago)   20h    <- same pod, restart count went 1->2
+  redis-596b6d8fdc-8l6dj   1/1   Running   2   <- same pod name, restart count went 1->2
 
   $ kubectl exec deploy/redis -- ls -la /data
-  -rw------- 1 redis ping 29518 Oct 7 19:52 dump.rdb
+  -rw------- 1 redis ping 29518 dump.rdb   <- present, predating this SHUTDOWN command
 
 Kubernetes restarted the *container* in place, inside the *same* Pod -
 and `emptyDir` volumes survive a container restart; they're only fresh
@@ -56,6 +57,7 @@ on a Pod reschedule (node drain, eviction, `kubectl delete pod`), not
 on every container restart - a crash that Kubernetes recovers in place
 (the far more common failure mode) actually preserves recent state via
 Redis's own periodic snapshotting, which nothing in this project
-configured deliberately; it's the image's stock default. ADR 0023
-updated to state this precisely rather than the broader claim it shipped
-with.
+configured deliberately; it's the image's stock default.
+redis-deployment.yaml's header comment and M4's limitations table both
+updated to state this precisely rather than the broader claim they
+shipped with.
