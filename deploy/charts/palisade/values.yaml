@@ -16,7 +16,7 @@ gateway:
     # can meaningfully check against a signature made for one exact build.
     # Bumped automatically by ci.yml's bump-digest job - GATEWAY_DIGEST is
     # its anchor, don't remove it even though it renders as a no-op comment.
-    digest: sha256:3afbb845ce320db559106a9c54034cf5422ddec89b089a4f891e961efca584d1 # GATEWAY_DIGEST
+    digest: sha256:7fc029c76875351254c27cce9a7445f53c58ccdb3f4e0fa7a5f15da208407bca # GATEWAY_DIGEST
   replicas: 1
   port: 8080
   resources:
