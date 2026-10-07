@@ -1,0 +1,54 @@
+Chaos experiment 1: kill vLLM mid-stream (hypothesis in chaos-hypotheses.md)
+
+Result: a real, previously-unknown bug, not the hypothesised behaviour.
+`kubectl delete pod` on vLLM while a stream was in flight caused
+`httpx.RemoteProtocolError: peer closed connection without sending
+complete message body` - an exception type `stream_chat_completion`
+did not catch (only `ConnectError`/`TimeoutException` were handled).
+
+Consequence, confirmed from the gateway's own logs at the time: the
+exception propagated past `relay()`'s `except UpstreamError` clause
+(wrong type), `finally` still ran but `status_code` was never
+reassigned from its default `"200"`, and the request's
+`chat_completion_settled` audit line would have reported
+`outcome="ok", status=200` for a request that actually failed and was
+truncated mid-generation - a genuinely misleading audit record, not
+merely a client-side inconvenience. The client (`curl`) received a
+truncated SSE stream and exited 0, since a closed chunked-transfer
+connection with no explicit length isn't something curl itself flags as
+an error.
+
+vLLM recovered on its own: Kubernetes started a replacement pod
+immediately (no restart-loop, no manual intervention needed) and it
+reached Ready within roughly a minute of real model-load time.
+
+Fixed: `upstream.py` now catches `httpx.RemoteProtocolError` explicitly
+and wraps it as an `UpstreamError(502, ...)`, so `relay()`'s existing
+error-handling path runs correctly - `status_code` is set, the client
+gets a proper SSE error chunk, and the audit line correctly reports
+`outcome="upstream_error", status=502`. Regression test:
+`tests/test_streaming.py::test_upstream_disconnecting_mid_stream_is_a_handled_upstream_error`.
+
+Raw transcript below.
+
+=== killing vLLM pod now ===
+pod "vllm-6bddbdf7dd-m295w" deleted from palisade namespace
+=== client output (last 10 lines, before the fix) ===
+
+data: {"id":"chatcmpl-b53d04d5993e44f8a673d1c94f2f98bf","object":"chat.completion.chunk","created":1791403028,"model":"palisade-small","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b53d04d5993e44f8a673d1c94f2f98bf","object":"chat.completion.chunk","created":1791403028,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" sleek"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b53d04d5993e44f8a673d1c94f2f98bf","object":"chat.completion.chunk","created":1791403028,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" robot"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+data: {"id":"chatcmpl-b53d04d5993e44f8a673d1c94f2f98bf","object":"chat.completion.chunk","created":1791403028,"model":"palisade-small","choices":[{"index":0,"delta":{"content":" named"},"logprobs":null,"finish_reason":null,"token_ids":null}]}
+
+CLIENT_EXIT=0
+
+=== gateway's actual traceback at the time (from kubectl logs) ===
+httpx.RemoteProtocolError: peer closed connection without sending complete message body (incomplete chunked read)
+  File "/app/app/routes/chat.py", line 221, in relay
+    async for chunk, maybe_usage in stream_chat_completion(
+  File "/app/app/upstream.py", line 131, in stream_chat_completion
+    async for line in response.aiter_lines():
+INFO:     10.42.0.1:33390 - "GET /readyz HTTP/1.1" 503 Service Unavailable
