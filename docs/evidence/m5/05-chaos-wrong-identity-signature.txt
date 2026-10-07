@@ -1,0 +1,60 @@
+Chaos experiment 4a: a validly-signed image from the wrong workflow
+identity (hypothesis in chaos-hypotheses.md)
+
+Result: confirmed exactly as hypothesised. A real, verifiable cosign
+signature is not enough on its own - Kyverno's keyless.subject match is
+an exact string on the signing workflow's path, and a different
+workflow's signature is refused identically to no signature at all.
+
+Setup: copied the model-verify image - genuinely signed by
+.github/workflows/model-verify-image.yml, not ci.yml - into the
+gateway's own GHCR repository under a demo tag, carrying its real
+Sigstore bundle referrers along (not just the raw manifest: the
+deprecated `cosign copy` command silently failed to carry the
+signature at all, confirmed by a `cosign verify` with a wildcard
+identity regex returning "no signatures found" immediately after; the
+actual copy needed `oras copy -r`, which is referrers-aware):
+
+  $ oras copy -r \
+      ghcr.io/saimcyber/palisade-model-verify@sha256:1abfbc3f4aa9e1af7c0188456f47a39b97eecc11d9b79e612af3e77785fea370 \
+      ghcr.io/saimcyber/palisade-gateway:wrong-identity-demo
+  Mounted 24357a8d5cd6 application/vnd.dev.sigstore.bundle.v0.3+json
+  Copied [registry] ghcr.io/saimcyber/palisade-model-verify@... => ghcr.io/saimcyber/palisade-gateway:wrong-identity-demo
+
+Confirmed the signature really did follow, under a wildcard identity
+check (proving it's real, just not the right identity):
+
+  $ cosign verify ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f... \
+      --certificate-identity-regexp='.*' \
+      --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+  Verification for ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f... --
+  The following checks were performed on each of these signatures:
+    - The cosign claims were validated
+    - Existence of the claims in the transparency log was verified offline
+    - The code-signing certificate was verified using trusted certificate authority certificates
+
+Then the actual admission test - a scratch Pod in the gateway's own
+namespace, referencing that digest under the gateway's repo path (so
+it hits `verify-gateway-signature`, which only trusts
+`ci.yml@refs/heads/main`):
+
+  $ kubectl apply -f scratch-wrong-identity-pod.yaml
+  Error from server: admission webhook "mutate.kyverno.svc-fail" denied the request:
+
+  resource Pod/palisade/gateway-wrong-identity was blocked due to the following policies
+
+  verify-palisade-image-signatures:
+    verify-gateway-signature: 'failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f...: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matching signatures found'
+
+Same message as M3's unsigned-image negative control
+(docs/evidence/m3/03-unsigned-image-refused.txt) - from Kyverno's side,
+"signed by someone else" and "not signed at all" are indistinguishable
+outcomes, both correctly refused. This is the actual security property
+ADR 0008 claims (keyless signing tied to a specific workflow identity,
+not just "any valid cosign signature") - this experiment is the first
+time it was tested against a signature that is real, just wrong.
+
+The demo tag and its copied referrers were left in the gateway's GHCR
+repository (ghcr.io/saimcyber/palisade-gateway:wrong-identity-demo) as
+a record of this test; it is never referenced by any chart value or
+pulled by the cluster outside this one scratch Pod attempt.

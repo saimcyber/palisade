@@ -1,0 +1,122 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "gateway-old-m3-digest",
+    "namespace": "palisade",
+    "labels": {
+      "app.kubernetes.io/managed-by": "Helm",
+      "app.kubernetes.io/name": "palisade-gateway",
+      "app.kubernetes.io/part-of": "palisade"
+    }
+  },
+  "spec": {
+    "containers": [
+      {
+        "envFrom": [
+          {
+            "configMapRef": {
+              "name": "palisade-gateway-config"
+            },
+            "prefix": "PALISADE_"
+          },
+          {
+            "prefix": "PALISADE_",
+            "secretRef": {
+              "name": "palisade-gateway-secret"
+            }
+          }
+        ],
+        "image": "ghcr.io/saimcyber/palisade-gateway@sha256:d8a0af80253621922cb9d320691a2ce74a027d6ba5fadc67ff2ea6acfa5b891e",
+        "imagePullPolicy": "IfNotPresent",
+        "livenessProbe": {
+          "failureThreshold": 3,
+          "httpGet": {
+            "path": "/healthz",
+            "port": "http",
+            "scheme": "HTTP"
+          },
+          "periodSeconds": 20,
+          "successThreshold": 1,
+          "timeoutSeconds": 1
+        },
+        "name": "gateway",
+        "ports": [
+          {
+            "containerPort": 8080,
+            "name": "http",
+            "protocol": "TCP"
+          }
+        ],
+        "readinessProbe": {
+          "failureThreshold": 3,
+          "httpGet": {
+            "path": "/readyz",
+            "port": "http",
+            "scheme": "HTTP"
+          },
+          "periodSeconds": 10,
+          "successThreshold": 1,
+          "timeoutSeconds": 1
+        },
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "256Mi"
+          },
+          "requests": {
+            "cpu": "100m",
+            "memory": "128Mi"
+          }
+        },
+        "securityContext": {
+          "allowPrivilegeEscalation": false,
+          "capabilities": {
+            "drop": [
+              "ALL"
+            ]
+          },
+          "readOnlyRootFilesystem": true
+        },
+        "startupProbe": {
+          "failureThreshold": 12,
+          "httpGet": {
+            "path": "/healthz",
+            "port": "http",
+            "scheme": "HTTP"
+          },
+          "periodSeconds": 5,
+          "successThreshold": 1,
+          "timeoutSeconds": 1
+        },
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File",
+        "volumeMounts": [
+          {
+            "mountPath": "/tmp",
+            "name": "tmp"
+          }
+        ]
+      }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": false,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {
+      "runAsGroup": 999,
+      "runAsNonRoot": true,
+      "runAsUser": 999,
+      "seccompProfile": {
+        "type": "RuntimeDefault"
+      }
+    },
+    "terminationGracePeriodSeconds": 30,
+    "volumes": [
+      {
+        "emptyDir": {},
+        "name": "tmp"
+      }
+    ]
+  }
+}
