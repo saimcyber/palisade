@@ -1,0 +1,37 @@
+Chaos experiment 4b: an old, genuinely-signed M3-era digest is admitted
+(hypothesis in chaos-hypotheses.md)
+
+Result: confirmed exactly as hypothesised. Kyverno's signature policy
+checks identity and validity, not currency - an older digest that was
+really built and signed by ci.yml, before any of M4's features
+existed, is let through the same as the current one.
+
+Digest used: sha256:d8a0af80253621922cb9d320691a2ce74a027d6ba5fadc67ff2ea6acfa5b891e
+- the exact digest from 7fd661b (the last gateway bump before 953d3f5,
+"m4: per-tenant budgets, rate limits, response cache, prompt guard...")
+and also the one used as the positive control in M3's own unsigned-
+image negative control (docs/evidence/m3/03-unsigned-image-refused.txt)
+- so this is a digest independently known to carry a real signature
+from this repo's own CI.
+
+The gateway's live rendered Pod spec was pulled from the cluster and
+replayed with only the image digest swapped, same discipline as M3's
+test (every baseline rule - non-root, drop ALL, read-only root,
+resource limits - must pass identically so the signature is the only
+variable):
+
+  $ kubectl apply --dry-run=server -f old-m3-pod-full.json
+  pod/gateway-old-m3-digest created (server dry run)
+
+No signature-related denial at all - Kyverno's verify-gateway-signature
+rule passed silently. (An earlier attempt with a bare, minimal Pod spec
+was correctly rejected, but by the unrelated pod-security-baseline
+policy - missing drop-ALL/read-only-root/non-root/resource-limits -
+confirming those are enforced independently of the signature check and
+is not evidence about the signature policy itself.)
+
+Together with 4a (docs/evidence/m5/05-*), this fully exercises both
+sides of ADR 0008's claim: the policy is identity-exact, not merely
+recency-based or "any valid signature passes" - a real signature from
+the wrong workflow is refused exactly like no signature; a real
+signature from the right workflow is accepted no matter how old.
