@@ -426,9 +426,12 @@ def limitations(D):
             ["Tenant revocation needs a gateway restart to take effect",
              "`PALISADE_TENANTS` is read once at startup - a deliberate trade for keeping tenant identity "
              "in Git rather than in Redis (ADR 0021)"],
-            ["Redis has no PersistentVolumeClaim", "A restart resets every rate-limit window and budget "
-             "counter to zero. Acceptable for a portfolio-scale platform; would need a PVC (and the "
-             "sync-wave care ADR 0017 already paid for vLLM's cache) to survive one"],
+            ["Redis has no PersistentVolumeClaim", "A Pod reschedule (node drain, eviction, deliberate "
+             "deletion) gets a genuinely empty store; a container restarting in place within the same Pod "
+             "does not, since the stock image's own periodic snapshot plus the surviving emptyDir reload "
+             "recent state - confirmed live in M5's chaos testing. Acceptable either way for a "
+             "portfolio-scale platform; would need a PVC (and the sync-wave care ADR 0017 already paid "
+             "for vLLM's cache) to make both cases stateless"],
             ["The prompt guard is keyword/regex-based", "Catches the textbook injection phrasing and "
              "nothing subtler - defence in depth, one layer among several, not a claim that prompt "
              "injection is solved (ADR 0022)"],
