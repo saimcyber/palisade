@@ -52,3 +52,13 @@ request's own timing above, though not captured as a discrete 503 in
 this particular run's sampling) - /readyz's existing try/except Exception
 around the ping call already handled this correctly, unlike the main
 request path, which had no equivalent protection until this fix.
+
+Re-run after the fix was built, signed, and rolled out to the live
+cluster (gateway digest sha256:f1ef281b...549a0): the identical
+CLIENT PAUSE 8000 ALL scenario now returns
+
+  {"error":"redis_unavailable"}
+  HTTP_CODE=503
+
+instead of a bare 500 with no body - confirming the fix on the real
+cluster, not just in the unit tests.
