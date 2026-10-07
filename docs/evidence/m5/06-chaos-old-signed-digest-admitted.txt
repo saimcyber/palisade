@@ -23,12 +23,30 @@ variable):
   $ kubectl apply --dry-run=server -f old-m3-pod-full.json
   pod/gateway-old-m3-digest created (server dry run)
 
-No signature-related denial at all - Kyverno's verify-gateway-signature
-rule passed silently. (An earlier attempt with a bare, minimal Pod spec
-was correctly rejected, but by the unrelated pod-security-baseline
-policy - missing drop-ALL/read-only-root/non-root/resource-limits -
-confirming those are enforced independently of the signature check and
-is not evidence about the signature policy itself.)
+No signature-related denial at all on the dry run - Kyverno's
+verify-gateway-signature rule passed silently. (An earlier attempt with
+a bare, minimal Pod spec was correctly rejected, but by the unrelated
+pod-security-baseline policy - missing drop-ALL/read-only-root/non-root/
+resource-limits - confirming those are enforced independently of the
+signature check and is not evidence about the signature policy itself.)
+
+Then applied for real, to confirm the hypothesis's second half (the
+pod actually starts, not just passes admission), and deleted it
+immediately after to avoid it taking live Service traffic alongside
+the real gateway Deployment (it carries the same gateway labels):
+
+  $ kubectl apply -f old-m3-pod-full.json
+  pod/gateway-old-m3-digest created
+
+  $ kubectl wait --for=condition=Ready pod/gateway-old-m3-digest --timeout=60s
+  pod/gateway-old-m3-digest condition met
+
+  $ kubectl get pod gateway-old-m3-digest
+  NAME                    READY   STATUS    RESTARTS   NODE
+  gateway-old-m3-digest   1/1     Running   0          k3d-palisade-server-0
+
+  $ kubectl delete pod gateway-old-m3-digest --wait=true
+  pod "gateway-old-m3-digest" deleted from palisade namespace
 
 Together with 4a (docs/evidence/m5/05-*), this fully exercises both
 sides of ADR 0008's claim: the policy is identity-exact, not merely

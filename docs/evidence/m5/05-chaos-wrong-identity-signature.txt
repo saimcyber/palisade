@@ -21,17 +21,34 @@ actual copy needed `oras copy -r`, which is referrers-aware):
   Mounted 24357a8d5cd6 application/vnd.dev.sigstore.bundle.v0.3+json
   Copied [registry] ghcr.io/saimcyber/palisade-model-verify@... => ghcr.io/saimcyber/palisade-gateway:wrong-identity-demo
 
-Confirmed the signature really did follow, under a wildcard identity
-check (proving it's real, just not the right identity):
+Confirmed the signature really did follow, and confirmed exactly which
+identity it carries, with an exact-identity check on each side rather
+than a wildcard (a wildcard match only proves "some signature exists",
+not which one - the actual SAN embedded in the certificate is what
+settles it):
 
   $ cosign verify ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f... \
-      --certificate-identity-regexp='.*' \
+      --certificate-identity='https://github.com/saimcyber/palisade/.github/workflows/model-verify-image.yml@refs/heads/main' \
       --certificate-oidc-issuer=https://token.actions.githubusercontent.com
   Verification for ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f... --
   The following checks were performed on each of these signatures:
     - The cosign claims were validated
     - Existence of the claims in the transparency log was verified offline
     - The code-signing certificate was verified using trusted certificate authority certificates
+  [... verification succeeds ...]
+
+  $ cosign verify ghcr.io/saimcyber/palisade-gateway@sha256:1abfbc3f... \
+      --certificate-identity='https://github.com/saimcyber/palisade/.github/workflows/ci.yml@refs/heads/main' \
+      --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+  Error: no matching attestations: failed to verify certificate identity:
+  no matching CertificateIdentity found, last error: expected SAN value
+  "https://github.com/saimcyber/palisade/.github/workflows/ci.yml@refs/heads/main",
+  got "https://github.com/saimcyber/palisade/.github/workflows/model-verify-image.yml@refs/heads/main"
+
+That pair is the real proof: the bundle exists, cosign's own exact-SAN
+check names the embedded identity outright, and it is genuinely
+`model-verify-image.yml`, not `ci.yml` - this is a real signature, on
+the wrong workflow, not a missing or malformed bundle.
 
 Then the actual admission test - a scratch Pod in the gateway's own
 namespace, referencing that digest under the gateway's repo path (so
