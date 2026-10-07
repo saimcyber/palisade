@@ -17,6 +17,7 @@ from starlette.responses import Response
 
 from .cache import ResponseCache
 from .config import settings
+from .loadshed import InFlightLimiter
 from .observability import configure_logging, new_request_id, request_id_var
 from .routes import chat, health
 from .tenancy import TenantStore, load_tenants
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI):
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.tenant_store = TenantStore(app.state.redis)
     app.state.response_cache = ResponseCache(app.state.redis)
+    app.state.in_flight_limiter = InFlightLimiter(
+        settings.max_in_flight_upstream_requests
+    )
     try:
         yield
     finally:

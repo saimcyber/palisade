@@ -76,3 +76,10 @@ data:
               severity: page
             annotations:
               summary: "{{ $labels.pod }} restarted more than 3 times in 15 minutes"
+
+          - alert: PalisadeLoadShedding
+            expr: increase(palisade_load_shed_total[5m]) > 0
+            labels:
+              severity: warn
+            annotations:
+              summary: "The gateway is shedding load - vLLM's in-flight cap is saturated"

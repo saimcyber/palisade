@@ -91,6 +91,16 @@ prompt_guard_blocks_total = Counter(
     ["reason"],  # length_exceeded | injection_suspected | pii_redacted
 )
 
+load_shed_total = Counter(
+    "palisade_load_shed_total",
+    "Requests rejected with 503 because too many were already in flight to vLLM",
+)
+
+upstream_in_flight = Gauge(
+    "palisade_upstream_in_flight",
+    "Requests currently waiting on a response from vLLM",
+)
+
 upstream_errors_total = Counter(
     "palisade_upstream_errors_total",
     "Errors talking to the upstream model server",

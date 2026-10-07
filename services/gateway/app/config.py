@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     # M1 Task 2 spike) unless a caller explicitly opts back in.
     default_enable_thinking: bool = False
 
+    # Bounds concurrent in-flight calls to vLLM (ADR 0005: one replica, no
+    # autoscaling - this is the whole queue-depth story). Past this many
+    # requests already waiting on the model, a new one is shed with 503
+    # rather than queued indefinitely behind work the GPU cannot speed up -
+    # see docs/adr/0024-load-shedding.md and M5's saturation test for the
+    # number this was tuned against.
+    max_in_flight_upstream_requests: int = 8
+
     log_level: str = "INFO"
 
 
