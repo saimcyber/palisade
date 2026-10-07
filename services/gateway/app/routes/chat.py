@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import time
 
+import redis.exceptions
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -28,6 +29,7 @@ from ..observability import (
     load_shed_total,
     log_event,
     rate_limited_total,
+    redis_errors_total,
     request_id_var,
     tenant_budget_remaining,
     tenant_tokens_total,
@@ -146,11 +148,36 @@ async def get_models(request: Request, tenant: Tenant = Depends(authenticate)) -
 async def create_chat_completion(
     request: Request, tenant: Tenant = Depends(authenticate)
 ) -> StreamingResponse | JSONResponse:
+    """Thin wrapper: every Redis call below this point (`tenant_store`,
+    `response_cache`) can raise `redis.exceptions.RedisError` if Redis
+    stalls or disconnects mid-request - found live during M5's chaos
+    day (`docs/evidence/m5/03-*`), where a paused Redis produced an
+    uncaught `TimeoutError` and a bare 500 with no audit line and no
+    metric. One catch here, rather than wrapping every call site below,
+    because the correct response is identical no matter which Redis
+    call failed: 503, audited, counted."""
+    start = time.monotonic()
+    try:
+        return await _create_chat_completion(request, tenant, start)
+    except redis.exceptions.RedisError:
+        redis_errors_total.inc()
+        http_requests_total.labels(
+            route="/v1/chat/completions", method="POST", status="503"
+        ).inc()
+        http_request_duration_seconds.labels(
+            route="/v1/chat/completions", method="POST"
+        ).observe(time.monotonic() - start)
+        _audit(tenant, outcome="redis_unavailable", status=503, start=start)
+        return JSONResponse(status_code=503, content={"error": "redis_unavailable"})
+
+
+async def _create_chat_completion(
+    request: Request, tenant: Tenant, start: float
+) -> StreamingResponse | JSONResponse:
     client = request.app.state.http_client
     tenant_store = request.app.state.tenant_store
     response_cache = request.app.state.response_cache
     request_id = request_id_var.get()
-    start = time.monotonic()
 
     if not await tenant_store.check_rate_limit(tenant):
         rate_limited_total.labels(tenant=tenant.name).inc()
@@ -230,12 +257,22 @@ async def create_chat_completion(
             finally:
                 limiter.release()
                 upstream_in_flight.set(limiter.in_flight)
-                if usage:
-                    await tenant_store.adjust_budget(
-                        tenant, _usage_total(usage) - reservation
-                    )
-                    _record_usage(tenant, usage, generated=True)
-                    await _refresh_budget_gauge(tenant_store, tenant)
+                try:
+                    if usage:
+                        await tenant_store.adjust_budget(
+                            tenant, _usage_total(usage) - reservation
+                        )
+                        _record_usage(tenant, usage, generated=True)
+                        await _refresh_budget_gauge(tenant_store, tenant)
+                except redis.exceptions.RedisError:
+                    # The response has already started streaming to the
+                    # client by this point - there is no status code
+                    # left to change. Counted so it's visible, not
+                    # silently swallowed; the reservation simply never
+                    # gets reconciled this one time (same outcome as the
+                    # non-streaming path's own documented trade-off for
+                    # an unusable usage value).
+                    redis_errors_total.inc()
                 else:
                     # Nothing usable came back (error, or a disconnect
                     # before the final chunk) - keep the full reservation

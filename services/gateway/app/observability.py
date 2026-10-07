@@ -96,6 +96,11 @@ load_shed_total = Counter(
     "Requests rejected with 503 because too many were already in flight to vLLM",
 )
 
+redis_errors_total = Counter(
+    "palisade_redis_errors_total",
+    "Requests that failed because Redis was unreachable or timed out mid-request",
+)
+
 upstream_in_flight = Gauge(
     "palisade_upstream_in_flight",
     "Requests currently waiting on a response from vLLM",
