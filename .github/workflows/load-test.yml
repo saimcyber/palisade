@@ -1,0 +1,85 @@
+# Runs the saturation load test against the gateway's own logic under
+# real concurrency, with a stub upstream standing in for vLLM (ADR
+# 0025) - no GPU, no self-hosted runner, nothing a fork's PR could turn
+# into arbitrary code execution on a machine that matters. The real,
+# GPU-backed run only ever happens locally, by hand; its numbers are
+# captured separately in docs/evidence/m5/ and back docs/SLO.md.
+name: load-test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/gateway/**"
+      - "tests/load/**"
+      - ".github/workflows/load-test.yml"
+  pull_request:
+    paths:
+      - "services/gateway/**"
+      - "tests/load/**"
+      - ".github/workflows/load-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  saturate:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      PALISADE_UPSTREAM_BASE_URL: http://localhost:8000
+      PALISADE_REDIS_URL: redis://localhost:6379/0
+      PALISADE_TENANT_A_KEY: "saturation-test-key"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: install gateway deps
+        working-directory: services/gateway
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -q --require-hashes -r requirements.txt
+
+      - name: set PALISADE_TENANTS from the real key's hash
+        # Rate limit and budget are generous enough that only the
+        # in-flight ceiling (default 8, untouched here) can trigger
+        # shedding - the whole point of this test is to isolate that
+        # one control, not re-prove the budget/rate-limit ones
+        # test_loadshed.py and test_tenancy.py already cover.
+        run: |
+          HASH=$(python3 -c "import hashlib; print(hashlib.sha256(b'${PALISADE_TENANT_A_KEY}').hexdigest())")
+          echo "PALISADE_TENANTS={\"${HASH}\":{\"name\":\"saturation-test\",\"rate_limit_per_minute\":100000,\"token_budget\":10000000}}" >> "$GITHUB_ENV"
+
+      - name: start the stub upstream
+        run: python3 tests/load/stub_upstream.py &
+
+      - name: start the gateway
+        working-directory: services/gateway
+        run: |
+          .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/healthz && break
+            sleep 1
+          done
+
+      - name: install k6
+        run: |
+          curl -fsSL https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz \
+            | tar -xz --strip-components 1 -C /usr/local/bin k6-v2.3.0-linux-amd64/k6
+
+      - name: run the saturation test
+        run: |
+          PALISADE_GATEWAY_URL=http://localhost:8080 k6 run tests/load/saturation.js
