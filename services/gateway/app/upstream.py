@@ -152,3 +152,16 @@ async def stream_chat_completion(
     except httpx.TimeoutException as exc:
         upstream_errors_total.labels(kind="timeout").inc()
         raise UpstreamError(504, "Upstream model server timed out") from exc
+    except httpx.RemoteProtocolError as exc:
+        # vLLM's connection closing mid-chunk (a killed pod, a crash) -
+        # found live in M5's chaos day (docs/evidence/m5/02-*): this was
+        # an uncaught exception before this handler existed, which meant
+        # `relay()`'s `except UpstreamError` never fired, `status_code`
+        # stayed "200", and the audit log reported a truncated stream as
+        # outcome="ok" for a request that actually failed. Wrapping it
+        # as an UpstreamError is what makes chat.py's own accounting
+        # correct, not just the client's error.
+        upstream_errors_total.labels(kind="disconnect").inc()
+        raise UpstreamError(
+            502, "Upstream model server disconnected mid-response"
+        ) from exc
