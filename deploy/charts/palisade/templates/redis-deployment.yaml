@@ -1,9 +1,19 @@
 # Backs tenancy.py's rate-limit/budget counters and cache.py's response
-# cache (ADR 0021) - in-memory only, no PersistentVolumeClaim: losing this
-# data on a restart means every tenant's counters reset to zero, which is
-# an acceptable cold-start for a portfolio-scale platform and far simpler
+# cache (ADR 0021) - no PersistentVolumeClaim, by design, and far simpler
 # than a PVC that would reintroduce the WaitForFirstConsumer sync-wave
 # deadlock ADR 0017 already fixed once for vLLM's cache.
+#
+# The "no PVC means a restart resets every counter" framing this comment
+# used to carry is only half true - found live in M5's chaos day
+# (docs/evidence/m5/04-chaos-redis-shutdown.txt). The stock redis image's
+# default periodic `save` directives write dump.rdb into this emptyDir
+# regardless, and emptyDir survives a container restarting in place
+# within the same Pod - so a crash Kubernetes recovers without
+# rescheduling the Pod actually reloads recent state. Only a real Pod
+# reschedule (node drain, eviction, `kubectl delete pod`) gets a
+# genuinely empty /data. Both are acceptable cold-starts for a
+# portfolio-scale platform; the point of this file is that neither case
+# needs a PVC, not that every restart is stateless.
 #
 # sync-wave 0, same as model-verify (ADR 0020 app-of-apps ordering still
 # governs policies-before-workloads at the Application level) - no

@@ -1,0 +1,61 @@
+Chaos experiment 3: lose Redis with SHUTDOWN NOSAVE (hypothesis in
+chaos-hypotheses.md)
+
+Result: the hypothesis's main prediction (clean 503, no data loss on
+the request path) was right about /readyz and wrong, in an interesting
+way, about data loss. The documented assumption going into M5 (ADR
+0023: "Redis has no PersistentVolumeClaim... a restart resets every
+rate-limit window and budget counter to zero") turned out to be true
+only for a pod-level reschedule, not for the much more common case of
+a container restarting in place within the same pod.
+
+=== tenant-b budget remaining BEFORE redis loss ===
+455
+=== a request right now ===
+200
+=== killing redis with SHUTDOWN NOSAVE ===
+=== readyz immediately after (correct: redis unreachable) ===
+503
+=== a request immediately after (this run was BEFORE the RedisError fix merged) ===
+Internal Server Error
+=== waiting for kubernetes to restart redis ===
+pod/redis-596b6d8fdc-8l6dj condition met
+=== readyz after redis recovers ===
+200
+=== tenant-b's budget after redis recovery - STILL 455, not reset ===
+455
+=== a request now (succeeded, 200 - but using the OLD budget, not a fresh one) ===
+200
+
+Why: `SHUTDOWN NOSAVE` only skips the *final* save on shutdown - Redis's
+stock image still runs its default periodic background saves (the
+`save` directives), which had already written a `dump.rdb` to `/data`
+before this experiment even started:
+
+  $ kubectl get pods -n palisade -l app.kubernetes.io/name=redis
+  redis-596b6d8fdc-8l6dj   1/1   Running   2 (27s ago)   20h    <- same pod, restart count went 1->2
+
+  $ kubectl exec deploy/redis -- ls -la /data
+  -rw------- 1 redis ping 29518 Oct 7 19:52 dump.rdb
+
+Kubernetes restarted the *container* in place, inside the *same* Pod -
+and `emptyDir` volumes survive a container restart; they're only fresh
+on a new Pod. Redis's own startup sequence then loaded that pre-existing
+`dump.rdb` automatically, restoring tenant-b's last snapshotted budget.
+
+Confirmed the actual boundary by forcing the other case:
+
+  $ kubectl delete pod -n palisade -l app.kubernetes.io/name=redis
+  $ kubectl exec deploy/redis -- ls -la /data
+  (empty - no dump.rdb)
+  $ redis-cli GET "budget:<tenant-b's hash>"
+  (nil)
+
+**The real, corrected claim**: Redis's lack of a PVC means data is lost
+on a Pod reschedule (node drain, eviction, `kubectl delete pod`), not
+on every container restart - a crash that Kubernetes recovers in place
+(the far more common failure mode) actually preserves recent state via
+Redis's own periodic snapshotting, which nothing in this project
+configured deliberately; it's the image's stock default. ADR 0023
+updated to state this precisely rather than the broader claim it shipped
+with.
