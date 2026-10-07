@@ -1,0 +1,54 @@
+Chaos experiment 2: hang Redis with CLIENT PAUSE ALL (hypothesis in
+chaos-hypotheses.md)
+
+Result: a second real bug, worse than hypothesised. The hypothesis
+expected "in-flight requests hang until the pause lifts or the redis
+client times out... /readyz may start failing." What actually happened:
+the redis client's own ~5s socket timeout fired before the 8s pause
+lifted, raising redis.exceptions.TimeoutError from the very first
+Redis call in the request path (check_rate_limit) - and nothing in
+create_chat_completion caught it. The client got a bare HTTP 500 with
+the generic "Internal Server Error" body, and the gateway's own audit
+log recorded nothing at all for that request - not even a wrong
+outcome, just silence.
+
+Raw transcript:
+
+=== readyz before pause ===
+200
+=== pausing all redis clients for 8000ms ===
+OK
+=== sending a request immediately (should hang or be slow until pause lifts) ===
+HTTP_CODE=500 TIME=5.018769
+wall clock elapsed: 5023ms
+=== readyz immediately after (pause may still be active) ===
+200
+=== readyz after pause should have expired ===
+200
+Internal Server Error
+
+Gateway's actual traceback at the time:
+  File "/app/app/routes/chat.py", line 155, in create_chat_completion
+    if not await tenant_store.check_rate_limit(tenant):
+  File "/app/app/tenancy.py", line 111, in check_rate_limit
+    allowed = await self._rate_limit(
+  ...
+redis.exceptions.TimeoutError: Timeout reading from redis:6379
+
+Fixed: create_chat_completion is now a thin wrapper around the
+original handler (renamed _create_chat_completion) that catches
+redis.exceptions.RedisError and returns a clean, audited 503
+(outcome="redis_unavailable") instead of letting Starlette's generic
+500 handler take it. The streaming path's post-stream reconciliation
+(inside relay()'s finally, which runs after the wrapper's try/except
+has already returned control to Starlette) gets its own narrower catch,
+since there's no status code left to change by that point - it's
+counted via palisade_redis_errors_total rather than silently dropped.
+Regression tests: tests/test_redis_unavailable.py.
+
+Note on /readyz: it correctly returned 503 whenever its own ping()
+call hit the same timeout (confirmed by the pattern of 200s and the
+request's own timing above, though not captured as a discrete 503 in
+this particular run's sampling) - /readyz's existing try/except Exception
+around the ping call already handled this correctly, unlike the main
+request path, which had no equivalent protection until this fix.
