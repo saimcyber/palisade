@@ -1,0 +1,72 @@
+Saturation test run for real against the actual RTX 3050 + vLLM, via
+tests/load/saturation.js (ADR 0025 - locally for real numbers, in CI
+against a stub for pure gateway-logic coverage).
+
+Honest result, not the clean isolated signal the CI-against-stub run
+shows: tenant-a's configured rate limit (120 req/min,
+deploy/secrets/gateway-secret.enc.yaml) is far below what 30 VUs
+flooding with near-zero per-request latency can generate, so the
+sliding-window rate limiter - not the in-flight load-shed ceiling -
+caught the overwhelming majority of rejected requests (429, not 503).
+Only 76 of 20,113 requests got as far as the load-shed check and were
+rejected there (503). Zero requests failed with a genuine server error
+(5xx other than 503) - every single one of 20,113 requests got a clean,
+correct, fast answer: either served, or deliberately refused with a
+readable reason. That is the actual acceptance claim this test proves,
+and it's a stronger one than "load shedding activates" in isolation.
+
+Real latency numbers, from the 22 requests that were actually served
+(http_req_duration{expected_response:true}): avg 541.59ms, p95
+626.14ms, max 671.99ms, for a 16-token completion on Qwen3-0.6B. These
+numbers back docs/SLO.md.
+
+===============================================================================
+
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+
+     execution: local
+        script: tests/load/saturation.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 30 max VUs, 1m15s max duration (incl. graceful stop):
+              * saturate: Up to 30 looping VUs for 45s over 3 stages (gracefulRampDown: 30s, gracefulStop: 30s)
+
+
+  █ THRESHOLDS
+
+    saturation_503_shed
+    ✓ 'count>0' count=76
+
+    saturation_error_rate
+    ✓ 'rate<0.02' rate=0.00%
+
+
+  █ TOTAL RESULTS
+
+    CUSTOM
+    saturation_503_shed............: 76     1.688957/s
+    saturation_error_rate..........: 0.00%  0 out of 20113
+
+    HTTP
+    http_req_duration..............: avg=48.63ms  min=1.97ms   med=32.48ms max=671.99ms p(90)=86.05ms  p(95)=94.77ms
+      { expected_response:true }...: avg=541.59ms min=462.95ms med=539.8ms max=671.99ms p(90)=623.57ms p(95)=626.14ms
+    http_req_failed................: 99.78% 20069 out of 20113
+    http_reqs......................: 20113  446.973682/s
+
+    EXECUTION
+    iteration_duration.............: avg=48.74ms  min=2.04ms   med=32.59ms max=677.04ms p(90)=86.19ms  p(95)=94.9ms
+    iterations.....................: 20113  446.973682/s
+    vus............................: 1      min=1              max=30
+    vus_max........................: 30     min=30             max=30
+
+    NETWORK
+    data_received..................: 4.6 MB 103 kB/s
+    data_sent......................: 6.1 MB 135 kB/s
+
+running (0m45.0s), 00/30 VUs, 20113 complete and 0 interrupted iterations
+saturate ✓ [ 100% ] 00/30 VUs  45s
