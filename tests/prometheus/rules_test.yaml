@@ -91,6 +91,23 @@ tests:
         alertname: PalisadeGPUSaturated
         exp_alerts: []
 
+  # --- PalisadeLoadShedding -------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: "palisade_load_shed_total"
+        values: "0 0 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PalisadeLoadShedding
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: PalisadeLoadShedding
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "The gateway is shedding load - vLLM's in-flight cap is saturated"
+
   # --- PalisadeSLOBurnRateHigh ---------------------------------------------
   - interval: 1m
     input_series:

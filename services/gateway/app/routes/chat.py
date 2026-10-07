@@ -25,12 +25,14 @@ from ..observability import (
     cache_tokens_saved_total,
     http_request_duration_seconds,
     http_requests_total,
+    load_shed_total,
     log_event,
     rate_limited_total,
     request_id_var,
     tenant_budget_remaining,
     tenant_tokens_total,
     tokens_total,
+    upstream_in_flight,
 )
 from ..policy import apply_policy, estimate_tokens
 from ..tenancy import Tenant
@@ -99,6 +101,25 @@ def _audit(
         prompt_tokens=usage.get("prompt_tokens", 0),
         completion_tokens=usage.get("completion_tokens", 0),
         duration_ms=round((time.monotonic() - start) * 1000, 1),
+    )
+
+
+def _shed(tenant: Tenant, start: float) -> JSONResponse:
+    """The 503 a request gets when too many are already in flight to
+    vLLM (ADR 0024) - distinct from every other rejection in this file
+    because nothing about the request itself was wrong; capacity was."""
+    load_shed_total.inc()
+    http_requests_total.labels(
+        route="/v1/chat/completions", method="POST", status="503"
+    ).inc()
+    http_request_duration_seconds.labels(
+        route="/v1/chat/completions", method="POST"
+    ).observe(time.monotonic() - start)
+    _audit(tenant, outcome="load_shed", status=503, start=start)
+    return JSONResponse(
+        status_code=503,
+        content={"error": "upstream_saturated"},
+        headers={"Retry-After": "2"},
     )
 
 
@@ -186,6 +207,12 @@ async def create_chat_completion(
     )
 
     if body.get("stream"):
+        limiter = request.app.state.in_flight_limiter
+        if not limiter.try_acquire():
+            await tenant_store.adjust_budget(tenant, -reservation)
+            await _refresh_budget_gauge(tenant_store, tenant)
+            return _shed(tenant, start)
+        upstream_in_flight.set(limiter.in_flight)
 
         async def relay():
             status_code = "200"
@@ -201,6 +228,8 @@ async def create_chat_completion(
                 status_code = str(exc.status_code)
                 yield f'data: {{"error": "{exc.detail}"}}\n\n'.encode()
             finally:
+                limiter.release()
+                upstream_in_flight.set(limiter.in_flight)
                 if usage:
                     await tenant_store.adjust_budget(
                         tenant, _usage_total(usage) - reservation
@@ -246,6 +275,12 @@ async def create_chat_completion(
         )
         return JSONResponse(content=cached)
 
+    limiter = request.app.state.in_flight_limiter
+    if not limiter.try_acquire():
+        await tenant_store.adjust_budget(tenant, -reservation)
+        await _refresh_budget_gauge(tenant_store, tenant)
+        return _shed(tenant, start)
+    upstream_in_flight.set(limiter.in_flight)
     try:
         data = await chat_completion(client, body, request_id)
     except UpstreamError as exc:
@@ -259,6 +294,9 @@ async def create_chat_completion(
         ).observe(time.monotonic() - start)
         _audit(tenant, outcome="upstream_error", status=exc.status_code, start=start)
         return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    finally:
+        limiter.release()
+        upstream_in_flight.set(limiter.in_flight)
 
     usage = data.get("usage") or {}
     await tenant_store.adjust_budget(tenant, _usage_total(usage) - reservation)

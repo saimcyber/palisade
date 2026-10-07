@@ -45,6 +45,17 @@ data:
           "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"},
             "expr": "histogram_quantile(0.95, sum(rate(palisade_time_to_first_token_seconds_bucket[5m])) by (le))",
             "legendFormat": "p95 TTFT"}]
+        },
+        {
+          "id": 5, "title": "In-flight requests to vLLM vs. the shed ceiling",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"},
+             "expr": "palisade_upstream_in_flight", "legendFormat": "in-flight"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"},
+             "expr": "rate(palisade_load_shed_total[1m])", "legendFormat": "shed/sec"}
+          ]
         }
       ]
     }
