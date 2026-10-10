@@ -4,6 +4,18 @@
 # and endpoints cluster-wide) buys nothing here. kube-state-metrics.yaml
 # needed its own narrow RBAC because it alone translates k8s API state
 # into metrics; Prometheus itself never talks to the API.
+#
+# A `kubectl rollout restart deploy/prometheus` right after this
+# ConfigMap changes can start a brand-new pod that still mounts the
+# *previous* version - the kubelet's local ConfigMap cache can lag the
+# API server's committed value by roughly its sync period, even for a
+# pod that didn't exist yet when the update landed. Confirmed live
+# while adding PalisadeGPUMemoryPressure: the first restart produced a
+# pod with the new rule file on disk (confirmed by `kubectl exec ...
+# cat`) but only the previous rule set loaded in `/api/v1/rules`; a
+# second restart a short wait later picked up the real content. If a
+# rule change isn't showing up after one restart, restart again rather
+# than assuming the YAML is wrong.
 apiVersion: v1
 kind: ConfigMap
 metadata:
