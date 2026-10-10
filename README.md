@@ -4,17 +4,43 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M4 — multi-tenant, metered, and watched.** Per-tenant token
-> budgets and rate limits (Redis-backed, atomic reservation) sit in front of
-> every request, alongside a response cache and a prompt guard. Two tenants
-> sending real traffic diverge exactly as designed — one exhausted its budget
-> and got `429`s while the other stayed unaffected —
-> [recorded run](docs/evidence/m4/01-two-tenants-k6-run.txt). Prometheus,
-> Grafana (four dashboards) and five alert rules run as their own
-> Argo-CD-managed stack, deliberately unable to block the gateway or vLLM if
-> something in it breaks. Everything from M3 — Argo CD deploys from git,
-> Kyverno refuses unsigned images, no egress from vLLM — still holds. Next:
-> M5, resilience and proof.
+> Status: **M5 complete — resilience and proof.** A signed image built from
+> the wrong GitHub Actions workflow is refused by Kyverno exactly like an
+> unsigned one, even though the signature itself is real —
+> [recorded run](docs/evidence/m5/05-chaos-wrong-identity-signature.txt). Two
+> real bugs were found by deliberately breaking the system — not by review,
+> not by a test, by a `kubectl delete pod` and a `redis-cli CLIENT PAUSE` —
+> and fixed, tested, and re-verified live:
+> [postmortem](docs/POSTMORTEM-001.md). Load shedding caps how many requests
+> reach vLLM at once, refunding the reservation on every shed. Every claim
+> about what this platform can and can't do is now written down in one place
+> each: [`THREAT-MODEL.md`](docs/THREAT-MODEL.md),
+> [`SLO.md`](docs/SLO.md), [`RUNBOOK.md`](docs/RUNBOOK.md),
+> [`COST.md`](docs/COST.md), [`ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> Everything from M3/M4 — Argo CD deploys from git, per-tenant budgets and
+> rate limits, Prometheus/Grafana watching without being able to block
+> anything — still holds, verified from a clean rebuild.
+
+### This is what happens when you try to deploy an unsigned image
+
+```
+$ kubectl apply -f unsigned-pod.yaml
+Error from server: error when creating "/tmp/unsigned-pod.yaml": admission webhook "mutate.kyverno.svc-fail" denied the request:
+
+resource Pod/palisade/gateway-unsigned was blocked due to the following policies
+
+verify-palisade-image-signatures:
+  verify-gateway-signature: 'failed to verify image ghcr.io/saimcyber/palisade-gateway@sha256:c07cca10...: .attestors[0].entries[0].keyless: sigstore bundle verification failed: no matching signatures found'
+```
+
+Not a demo flag, not a staged failure — this is the cluster's real
+admission webhook, on the actual pod spec the gateway Deployment uses,
+differing from a working one only in the image digest
+([full transcript](docs/evidence/m3/03-unsigned-image-refused.txt)). The
+same policy refuses a **validly signed** image too, if it was signed by
+the wrong GitHub Actions workflow
+([recorded run](docs/evidence/m5/05-chaos-wrong-identity-signature.txt)) —
+a real signature isn't enough; it has to be *this repo's* signature.
 
 ---
 
@@ -98,24 +124,32 @@ choice on constrained hardware, not a shortcut.
 ## Repository layout
 
 ```
-services/        the gateway and the model runtime
-infra/terraform/ AWS (S3, IAM, OIDC) and cluster add-ons
-deploy/          Helm chart, Argo CD apps, Kyverno policies, SOPS secrets
-observability/   Grafana dashboards and Prometheus alert rules
-docker/          the GPU-capable k3s node image
-scripts/         lifecycle and verification scripts
-k8s/             standalone manifests (currently the GPU acceptance test)
-docs/            architecture, ADRs, threat model, SLO, runbook
-documentation/   a Word document per milestone — what was built and why
-tests/           unit, integration and k6 load tests
+services/              the gateway and the model runtime
+infra/terraform/       AWS (S3, IAM, OIDC) and cluster add-ons
+deploy/                Helm chart, Argo CD apps, Kyverno policies, SOPS secrets
+deploy/observability/  Grafana dashboards and Prometheus alert rules
+docker/                the GPU-capable k3s node image, the project-built gpu-exporter
+scripts/               lifecycle and verification scripts
+k8s/                   standalone manifests (currently the GPU acceptance test)
+docs/                  architecture, ADRs, threat model, SLO, runbook, cost, postmortems
+docs/evidence/         raw transcripts proving each milestone's claims, M0 through M5
+documentation/         a Word document per milestone — what was built and why
+tests/                 unit, integration and k6 load tests
 ```
 
 ## Documentation
 
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system diagrams, sync-wave ordering, trust boundaries
+- [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) — STRIDE mapped to real controls, and what's explicitly out of scope
+- [`docs/SLO.md`](docs/SLO.md) — the SLIs/targets this platform is actually measured against
+- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — one entry per alert that actually exists, no speculative entries
+- [`docs/COST.md`](docs/COST.md) — real cloud GPU pricing vs. real hosted-API pricing, worked out honestly
+- [`docs/POSTMORTEM-001.md`](docs/POSTMORTEM-001.md) — two real bugs chaos testing found, blameless write-up
+- [`docs/evidence/`](docs/evidence/) — raw command transcripts proving every claim above actually happened
+- [`docs/adr/`](docs/adr/) — architecture decision records, including the dead ends and what was rejected
 - [`docs/devlog.md`](docs/devlog.md) — running notes, newest first
-- [`docs/adr/`](docs/adr/) — architecture decision records
 - [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — how I work on this and what I've settled on
-- [`documentation/`](documentation/) — the polished per-milestone write-ups
+- [`documentation/`](documentation/) — the polished, dual-register (plain-language + technical) per-milestone write-ups
 
 ## License
 
