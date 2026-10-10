@@ -4,7 +4,10 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M5 complete — resilience and proof.** A signed image built from
+> Status: **M5 in progress — resilience and proof.** Chaos day, the load
+> test, and all five engineering documents below are done; a clean-rebuild
+> acceptance pass and the milestone's own Word doc are not yet — see the
+> [status table](#status) for exactly what's left. A signed image built from
 > the wrong GitHub Actions workflow is refused by Kyverno exactly like an
 > unsigned one, even though the signature itself is real —
 > [recorded run](docs/evidence/m5/05-chaos-wrong-identity-signature.txt). Two
@@ -44,7 +47,18 @@ a real signature isn't enough; it has to be *this repo's* signature.
 
 ---
 
-## Why I'm building this
+## Status
+
+| Milestone | State |
+| --- | --- |
+| M0 Foundations | Complete — verified from a clean rebuild |
+| M1 Inference service | Complete — gateway streams real tokens from the GPU, in-cluster |
+| M2 Supply chain & CI/CD | Complete — signed, SBOM-attested image on ghcr.io; OIDC-only AWS access |
+| M3 Kubernetes, GitOps & policy | Complete — push deploys itself; unsigned image refused; verified from a clean rebuild |
+| M4 Platform & observability | Complete — per-tenant budgets/rate limits enforced live; Prometheus+Grafana+alerts running, verified from a clean rebuild |
+| M5 Resilience & proof | **In progress.** Done: k6 saturation test in CI, chaos day (5 experiments, 2 real bugs found/fixed/verified live), load shedding, all five docs (`ARCHITECTURE`/`THREAT-MODEL`/`SLO`/`RUNBOOK`/`COST`), the blameless postmortem. Not yet done: a clean-rebuild acceptance pass, the Cloudflare Tunnel demo, the M5 engineering Word doc, and a fresh-clone verification. The demo video called for in the plan is deliberately deferred. |
+
+
 
 This is a personal learning project. I'm a Cyber Security undergrad going into
 platform / DevOps engineering, and I wanted one project where I actually build
@@ -132,7 +146,7 @@ docker/                the GPU-capable k3s node image, the project-built gpu-exp
 scripts/               lifecycle and verification scripts
 k8s/                   standalone manifests (currently the GPU acceptance test)
 docs/                  architecture, ADRs, threat model, SLO, runbook, cost, postmortems
-docs/evidence/         raw transcripts proving each milestone's claims, M0 through M5
+docs/evidence/         raw transcripts proving each milestone's claims, M3 through M5
 documentation/         a Word document per milestone — what was built and why
 tests/                 unit, integration and k6 load tests
 ```
