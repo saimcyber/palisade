@@ -158,7 +158,7 @@ what the exercise is for:
 | Catch `httpx.RemoteProtocolError` in the streaming path | Done |
 | Catch `redis.exceptions.RedisError` around the request handler | Done |
 | Correct `redis-deployment.yaml` / M4 doc's restart-reset claim | Done |
-| Add a GPU memory-pressure alert (found during experiment 5, not yet acted on) | Not done - documented as a known gap |
+| Add a GPU memory-pressure alert (found during experiment 5) | Done - `PalisadeGPUMemoryPressure`, `deploy/observability/prometheus-config.yaml` |
 | Re-run the VRAM exhaustion experiment on a native Linux host, if one becomes available, to confirm the hard-OOM prediction | Not done - no such host available to this project |
 
 ## Lessons learned

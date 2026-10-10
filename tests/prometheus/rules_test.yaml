@@ -91,6 +91,38 @@ tests:
         alertname: PalisadeGPUSaturated
         exp_alerts: []
 
+  # --- PalisadeGPUMemoryPressure (found during M5's chaos day VRAM test,
+  # docs/evidence/m5/07-* - the GPU alert that existed before this one only
+  # watched compute utilisation, not memory, and missed a real ~95.4% peak) -
+  - interval: 1m
+    input_series:
+      - series: "nvidia_smi_memory_used_bytes"
+        values: "4000000000+0x15"
+      - series: "nvidia_smi_memory_total_bytes"
+        values: "4294967296+0x15"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PalisadeGPUMemoryPressure
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: PalisadeGPUMemoryPressure
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "GPU memory over 90% for 5 minutes - the card is close to the point where allocation starts failing or degrading"
+
+  - interval: 1m
+    input_series:
+      - series: "nvidia_smi_memory_used_bytes"
+        values: "2700000000+0x15"
+      - series: "nvidia_smi_memory_total_bytes"
+        values: "4294967296+0x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PalisadeGPUMemoryPressure
+        exp_alerts: []
+
   # --- PalisadeLoadShedding -------------------------------------------------
   - interval: 1m
     input_series:
