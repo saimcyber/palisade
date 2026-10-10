@@ -33,7 +33,7 @@ prove it happened. For a platform whose stated purpose is auditable
 per-tenant usage, both are the specific failure mode that defeats the
 point of having an audit log at all.
 
-## Timeline
+## Sequence of events
 
 No calendar timestamps are recorded here, consistent with this
 project's standing no-time-references rule - the sequence, not the
@@ -81,12 +81,18 @@ conditions, before an untested failure mode finds you some other way.
 ## Detection
 
 Neither bug was caught by any existing alert, test, or review -
-confirmed by re-checking: `PalisadeSLOBurnRateHigh` tracks `5xx` rate,
-and bug #1's symptom was a false `200`, invisible to it; bug #2
-produced a real `500`, which that alert *would* have caught, but only
-after the fact and with no indication from the audit log of which
-tenant or request was affected beyond what Starlette's generic handler
-happened to log. Both were found exclusively by chaos day's
+confirmed by re-checking, and bug #2 is the sharper case of the two.
+`PalisadeSLOBurnRateHigh` tracks a ratio of `palisade_http_requests_
+total{status=~"5.."}` over the same counter's total - but every
+increment of that counter lives inside `chat.py`'s own handler code,
+with no middleware-level fallback. The uncaught `redis.exceptions.
+TimeoutError` in bug #2 was raised by the *first* Redis call in the
+request path, before any `http_requests_total.labels(...).inc()` call
+had executed - so the metric itself was never incremented, and the
+alert had nothing to see. Bug #1's symptom (a false `200`) was
+invisible to the same alert for a different reason - it genuinely was
+recorded as a success, so there was nothing anomalous in the metric to
+alert on either way. Both bugs were found exclusively by chaos day's
 deliberate-failure methodology: write the hypothesis, break the real
 dependency, read what actually happened. This is itself the argument
 for chaos testing as a practice, not a one-time M5 checkbox - these
@@ -125,21 +131,21 @@ what the exercise is for:
 - **Redis data survives more restarts than documented** - a container
   restarting in place within the same Pod reloads a pre-existing
   `dump.rdb` from the surviving `emptyDir`, so tenant budgets do not
-  reset on every Redis restart as ADR 0023's original wording implied
-  - only on a genuine Pod reschedule. Corrected in
-  `redis-deployment.yaml`'s header and M4's limitations table
-  (`docs/evidence/m5/04-*`).
+  reset on every Redis restart as `redis-deployment.yaml`'s header
+  comment and M4's limitations table originally claimed - only on a
+  genuine Pod reschedule. Both corrected (`docs/evidence/m5/04-*`).
 - **Kyverno's signature policy is identity-exact in both directions**
   - a real signature from the wrong GitHub Actions workflow is refused
   exactly like no signature at all, and an old but genuinely
   `ci.yml`-signed digest is admitted regardless of age
   (`docs/evidence/m5/05-*`, `06-*`).
 - **VRAM exhaustion degrades soft on this host, not hard** - a finding
-  about this machine's WSL2/WDDM driver stack, not about the
-  application. See `docs/evidence/m5/07-*` for the full mechanism
-  (the Windows driver pages idle GPU allocations out to host RAM
-  instead of returning an out-of-memory error) and the explicit caveat
-  that this would very likely fail hard on a native Linux host. A
+  about this machine's WSL2/Windows driver stack, not about the
+  application. See `docs/evidence/m5/07-*` for what was actually
+  measured (Windows' own GPU counters show ~2.2 GiB moving from
+  dedicated VRAM into host RAM instead of the allocation failing, and
+  the explicit caveat that this would plausibly fail hard on a native
+  Linux host, which was not tested). A
   genuine observability gap surfaced alongside it: no alert exists for
   GPU *memory* pressure, only GPU compute utilization
   (`PalisadeGPUSaturated`), even though the test's own Prometheus data
@@ -151,7 +157,7 @@ what the exercise is for:
 | --- | --- |
 | Catch `httpx.RemoteProtocolError` in the streaming path | Done |
 | Catch `redis.exceptions.RedisError` around the request handler | Done |
-| Correct ADR 0023 / `redis-deployment.yaml`'s restart-reset claim | Done |
+| Correct `redis-deployment.yaml` / M4 doc's restart-reset claim | Done |
 | Add a GPU memory-pressure alert (found during experiment 5, not yet acted on) | Not done - documented as a known gap |
 | Re-run the VRAM exhaustion experiment on a native Linux host, if one becomes available, to confirm the hard-OOM prediction | Not done - no such host available to this project |
 
@@ -163,9 +169,11 @@ it looks complete. The broader one is what justified M5's chaos day
 existing at all - the two most damaging bugs in this entire project
 were not caught by any test, alert, or code review, because nothing
 had ever actually broken the dependencies they depend on. Both were
-found in the time it took to write a `kubectl delete pod` and a
-`redis-cli CLIENT PAUSE` command. The actual lesson is not "write
-chaos tests" as a one-time M5 deliverable - it's that an audit-logging
+found by a single `kubectl delete pod` and a single `redis-cli CLIENT
+PAUSE` command - no special tooling, no long investigation, just
+actually breaking the thing on purpose. The actual lesson is not
+"write chaos tests" as a one-time M5 deliverable - it's that an
+audit-logging
 system's correctness claims are only as strong as the failure modes
 someone has actually gone looking for, and this project's own
 dependencies (vLLM, Redis) still have failure modes nobody has tested

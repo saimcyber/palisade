@@ -49,42 +49,72 @@ card.
 Windows' own GPU performance counters (`Get-Counter`) show what
 nvidia-smi does not - a second memory pool, "Shared Usage" (host RAM
 borrowed by the GPU driver), alongside "Dedicated Usage" (the real
-VRAM nvidia-smi reports):
+VRAM nvidia-smi reports). Both counters were read for the RTX 3050's
+own adapter LUID specifically (`...14d53`); this host also reports an
+integrated-GPU adapter under a different LUID, which is not the card
+any of this ran on and is excluded below.
 
-  baseline (nothing running):
-    dedicated = 425,754,624 B (~406 MiB - driver/desktop baseline)
-    shared    =  94,633,984 B (~90 MiB)
+  baseline (vLLM serving normally, no hog):
+    dedicated = 2,745,901,056 B (~2619 MiB - matches nvidia-smi's own
+                2615 MiB steady-state figure used throughout this
+                chaos day)
+    shared    =    94,633,984 B (~90 MiB)
+  (the card with literally nothing running was never separately
+  measured in this session - not claimed here)
 
-  hog alone (3.6 GiB allocated):
+  hog alone (3.6 GiB allocated, vLLM scaled to 0):
     dedicated = 3,953,840,128 B (~3770 MiB - matches nvidia-smi's 3767 MiB)
-    shared    =  79,953,920 B (~76 MiB - unchanged, confirming the hog
-                itself stayed in real VRAM)
+    shared    =    79,953,920 B (~76 MiB - essentially unchanged from
+                baseline)
 
-  vLLM scaled back up, mid-startup and at steady state (identical both times):
+  vLLM scaled back up alongside the hog (measured mid-startup and
+  again once Ready - identical both times):
     dedicated = 4,082,532,352 B (~3893 MiB - the card, maxed)
-    shared    = 2,321,809,408 B (~2214 MiB - up from ~76 MiB baseline)
+    shared    = 2,321,809,408 B (~2214 MiB - up from ~76-90 MiB baseline)
 
-That ~2.2 GiB jump in Shared Usage, with no further room in Dedicated,
-is the WDDM driver's CUDA system-memory fallback: when a new
-allocation doesn't fit in dedicated VRAM, Windows pages the least
-recently touched allocation out to host RAM instead of returning
-cudaErrorMemoryAllocation. The amount paged out (~2.2 GiB) is close to
-the hog's own size (3.6 GiB) adjusted for vLLM's real footprint - i.e.
-the driver evicted the *idle* hog, not the actively-computing vLLM
-process, to make room.
+What this establishes: a ~2.2 GiB block of GPU-adapter memory moved
+into host RAM at exactly the point vLLM needed more than Dedicated had
+left. What it does not establish: whose allocation moved. `GPU Adapter
+Memory` counts the whole adapter, not a specific process, and this
+host's WSL2 GPU paravirtualization reports GPU activity through a
+single VM-level process, not per-container - there is no counter here
+that can attribute the moved memory to the hog specifically rather
+than to vLLM's own, mostly-untouched 512 MiB KV-cache reservation.
 
-This also explains why the hypothesis's predicted latency cliff did
-not clearly appear: a cold, cache-miss request during the hog-holding
-state measured 3383.4 ms; an equivalent cold request once the hog was
-removed measured 3078.4 ms. A ~10% difference, not a cliff - consistent
-with vLLM's own working set staying resident in real, fast VRAM while
-only the unrelated, inactive hog got relegated to the slower shared
-pool. Native Linux has no WDDM layer and no such fallback; the same
-test on bare-metal Linux would very likely produce the
-`torch.OutOfMemoryError` crash loop the hypothesis predicted. This
-machine's WSL2/Windows stack was not a neutral test environment for
-this specific experiment, and that is itself worth recording, not
-smoothing over.
+One thing the latency measurement below does establish: vLLM's model
+weights did not move to host RAM. Decoding one token at a time reads
+the weights on every step: if those ~1.4 GiB of weights had been
+served over PCIe instead of the card's own memory, decode would have
+been several times slower, not ~10% slower. So whatever moved, it was
+not the part of vLLM doing active work on every token - consistent
+with (but not proof of) the hog's idle allocation being the one that
+got relegated.
+
+Described generically, since the exact in-driver mechanism was not
+directly observed: on this host, the Windows graphics driver stack
+backs GPU memory overflow with host RAM instead of failing the
+allocation outright. Native Linux has no such fallback through this
+stack; the same test on bare-metal Linux would plausibly produce the
+`torch.OutOfMemoryError` crash loop the hypothesis predicted, though
+that was not tested here - no native Linux host was available to this
+project. This machine's WSL2/Windows stack was not a neutral test
+environment for this specific experiment, and that is itself worth
+recording, not smoothing over.
+
+The hypothesis predicted an OOM crash loop, not a latency cliff - no
+latency claim was part of the original prediction. The latency numbers
+below are reported as a separate, additional observation, not as
+confirming or denying the hypothesis itself.
+
+A single cold (cache-miss) request during the hog-holding state
+measured 3383.4 ms (per the gateway's own audit log, request_id
+b210440d...); a single cold request once the hog was removed measured
+3078.4 ms. Each is one sample, not an average, and the two used
+different prompt text (a repeated prompt would have hit the response
+cache instead of forcing a real generation) - so this is a rough,
+one-shot comparison, not a controlled benchmark. The ~10% difference
+is at least consistent with vLLM's active working set staying in fast
+memory throughout.
 
 === alerting gap found along the way ===
 Prometheus's own retained metrics put the peak `nvidia_smi_memory_used_
@@ -107,11 +137,12 @@ palisade namespace gained a restart attributable to this experiment;
 `PalisadeRestartLoop` never had cause to fire.
 
 Conclusion: the acceptance criterion for this experiment was "capture
-what actually happens," not "reproduce a crash." What actually happens,
-on this specific host, is a soft degradation mediated by the Windows
-driver's own memory-pressure handling, not the hard OOM the hypothesis
-predicted - and that distinction matters for anyone reading this as a
-production-readiness signal: the resilience observed here is a
-property of running under WSL2/WDDM, not of this deployment's own
-design, and should not be read as "this configuration tolerates
-running out of VRAM" on any other host.
+what actually happens," not "reproduce a crash." What actually
+happened, on this specific host, is a soft degradation mediated by the
+Windows graphics driver's own handling of GPU memory overflow, not the
+hard OOM the hypothesis predicted - and that distinction matters for
+anyone reading this as a production-readiness signal: the resilience
+observed here is most plausibly a property of running under this
+host's WSL2/Windows driver stack, not of this deployment's own design,
+and should not be read as "this configuration tolerates running out of
+VRAM" on a native Linux host, which was not tested.
