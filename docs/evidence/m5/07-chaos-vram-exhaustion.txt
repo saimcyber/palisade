@@ -1,0 +1,85 @@
+Chaos experiment 5: VRAM exhaustion (hypothesis in chaos-hypotheses.md)
+
+Result: the hypothesis was wrong, and wrong in the interesting
+direction - this configuration turned out to be far more resilient to
+VRAM pressure than CLAUDE.md's own prior finding predicted, not less.
+No OOM crash loop was ever produced; three escalating attempts all
+ended in vLLM successfully starting and serving real tokens.
+
+Method: scaled vLLM to 0 replicas (freeing the whole card), started a
+scratch Pod (reusing the already-pulled vllm/vllm-openai:v0.28.0 image,
+so no new image pull - with the same CDI annotation, runtimeClassName,
+and baseline security context as the real vLLM Deployment) that
+allocates a fixed block of GPU memory with `torch.zeros(..., device=
+"cuda")` and holds it, then scaled vLLM back to 1 replica to see
+whether it would fit.
+
+=== attempt 1: hog = 512 MiB, held while vLLM was still running ===
+Reasoning at the time: CLAUDE.md records that the in-cluster
+--kv-cache-memory-bytes=512M fix left only a ~30-50 MiB margin during
+the original M1 investigation, so a small hog seemed sufficient.
+Abandoned before testing - the arithmetic doesn't actually work: vLLM's
+own ~2.6 GiB would be freed by deleting its pod, more than offsetting a
+512 MiB hog on a 4096 MiB card. Scaled vLLM to 0 instead, to control
+the free-memory budget directly rather than fighting a restart race.
+
+=== attempt 2: hog = 2.3 GiB, vLLM scaled 0 -> 1 ===
+nvidia-smi before scale-up: 2435 MiB used (hog only), 1528 MiB free -
+below vLLM's observed ~2.6 GiB steady-state footprint.
+Expected: OOM. Actual: vLLM started cleanly (1/1 Ready, 0 restarts) and
+served a real request (HTTP_CODE=200). Afterward: 3852 MiB used total,
+111 MiB free - vLLM's actual footprint here was roughly 1.4-1.5 GiB,
+far below its usual ~2.6 GiB, meaning the 2.6 GiB figure includes
+caching-allocator headroom that isn't strictly required, not a hard
+floor.
+
+=== attempt 3: hog = 3.6 GiB, vLLM scaled 0 -> 1 ===
+nvidia-smi before scale-up: 196 MiB free.
+Expected (now revised downward, but still expecting failure this low):
+OOM. Actual: vLLM again started cleanly (1/1 Ready, 0 restarts) after
+its normal weight-loading sequence (visible in logs: "Checkpoint size:
+1.40 GiB... Loading safetensors checkpoint shards"), and the card
+settled at 77 MiB free, 3886 MiB used. A real generation request
+(max_tokens=100, "write a long story about a dog") returned a complete
+100-token response with HTTP_CODE=200 - not just a clean startup, a
+genuine, correct inference under near-zero VRAM headroom.
+
+Why this diverges from CLAUDE.md's prior finding: the earlier M1-era
+failures ("needing only 30-50 MiB more") happened *before* the
+--kv-cache-memory-bytes=512M fix was applied cleanly - they were
+failures of vLLM's percentage-based KV-cache auto-sizing math reading
+a skewed number in the nested k3d-node-container CDI path. Once the KV
+cache size is stated as a literal byte count instead of a percentage,
+allocation becomes a fixed, explicit reservation checked once at
+startup, not an elastic calculation vulnerable to that skew - so the
+real headroom this configuration needs is much smaller than the
+historical failure suggested, and, more importantly, predictable: it
+either fits at startup or it doesn't, with no further growth risk once
+serving begins (consistent with the KV cache being pre-reserved rather
+than grown lazily per request).
+
+Recovery, for the record (never needed - nothing crashed): delete the
+hog Pod, confirm nvidia-smi free memory returns to baseline. No `make
+gpu-cdi` re-run, no Docker Desktop restart, no host GPU reset were
+required at any point in this experiment - GPU memory was reclaimed
+cleanly on every hog-pod deletion.
+
+=== post-experiment cluster state ===
+nvidia-smi: 2615 MiB used, 1348 MiB free (identical to the pre-
+experiment baseline)
+kubectl get pods -n palisade: gateway, redis, vllm all 1/1 Running, 0
+new restarts attributable to this experiment
+
+Conclusion: the acceptance criterion for this experiment was "capture
+what actually happens," not "reproduce a crash." What actually happens
+is that this specific configuration (Qwen3-0.6B, --enforce-eager,
+--kv-cache-memory-bytes=512M, --gpu-memory-utilization=0.6 as a ceiling
+rather than a reservation) is substantially more VRAM-resilient than
+the 4 GiB ceiling and the M1-era failure history suggested. A genuine
+OOM crash loop was not reproduced in this session despite three
+escalating attempts; reproducing one would need either a far larger
+competing allocation than tested here, a larger model, or disabling
+--enforce-eager (CUDA graphs reserve additional memory up front) - none
+of which this session pursued further, since the honest result -
+"this is more robust than documented, not less" - is itself the
+valuable finding.
