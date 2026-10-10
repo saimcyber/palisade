@@ -60,6 +60,41 @@ the cost of admitting fewer.
 
 ---
 
+## PalisadeGPUMemoryPressure
+
+**Fires when:** `nvidia_smi_memory_used_bytes / nvidia_smi_memory_
+total_bytes` exceeds 90%, sustained `for: 5m`.
+
+**What it means:** The GPU is close to running out of VRAM. Added
+after M5's chaos day found that an earlier VRAM-exhaustion test peaked
+at ~95.4% memory used with no alert firing at all - `PalisadeGPU
+Saturated` only watches compute utilisation, which is a different
+thing entirely from memory pressure.
+
+**First checks:**
+1. `kubectl get pods -n palisade -l app.kubernetes.io/name=vllm` - is
+   vLLM still `1/1 Running`? Memory pressure from something *other*
+   than vLLM (a stray debugging pod, a leaked process) is the most
+   likely cause if vLLM itself looks healthy.
+2. `nvidia-smi` on the host - compare dedicated VRAM usage against
+   what vLLM's own Deployment is configured to use
+   (`--gpu-memory-utilization`, `--kv-cache-memory-bytes` in
+   `deploy/charts/palisade/values.yaml`).
+3. On a WSL2/Windows host specifically: this metric only sees
+   dedicated VRAM, not the Windows driver's shared-memory fallback
+   (`docs/evidence/m5/07-*`) - this alert can fire while the platform
+   is still serving correctly, just more slowly. On native Linux there
+   is no such fallback, and this alert firing is a much stronger
+   signal of imminent failure.
+
+**Likely fix:** Delete whatever is holding memory that isn't vLLM.
+If vLLM itself is the only thing running and this still fires, the
+GPU genuinely doesn't have enough VRAM for the current configuration -
+lower `--gpu-memory-utilization` or `--kv-cache-memory-bytes`, at the
+cost of a smaller KV cache and lower max concurrency.
+
+---
+
 ## PalisadeTenantBudgetExhausted
 
 **Fires when:** `increase(palisade_budget_rejected_total[5m]) > 0`.

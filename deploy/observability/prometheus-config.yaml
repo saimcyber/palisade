@@ -56,6 +56,24 @@ data:
             annotations:
               summary: "GPU utilisation over 95% for 10 minutes - requests may be queueing"
 
+          - alert: PalisadeGPUMemoryPressure
+            # Found during M5's chaos day (docs/evidence/m5/07-*): a VRAM
+            # exhaustion test peaked at ~95.4% memory used with no alert
+            # firing, because this was the only GPU alert that existed and
+            # it only watches compute utilisation, not memory. Threshold
+            # set below that observed peak (normal serving sits ~64%) -
+            # under WSL2/WDDM this metric only sees dedicated memory and
+            # can plateau near 95% even while still serving correctly, so
+            # the threshold has to clear real serving load without also
+            # sitting right against the WDDM soft-degradation ceiling that
+            # same test found.
+            expr: nvidia_smi_memory_used_bytes / nvidia_smi_memory_total_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warn
+            annotations:
+              summary: "GPU memory over 90% for 5 minutes - the card is close to the point where allocation starts failing or degrading"
+
           - alert: PalisadeTenantBudgetExhausted
             expr: increase(palisade_budget_rejected_total[5m]) > 0
             labels:
