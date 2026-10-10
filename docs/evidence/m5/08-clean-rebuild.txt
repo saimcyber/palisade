@@ -1,0 +1,69 @@
+M5 acceptance: a clean rebuild reproduces the platform
+
+Per CLAUDE.md's "finished" definition - the acceptance command passes
+from a clean rebuild, not from a machine that happens to be in a good
+state - and M5's own acceptance line in the plan ("`git clone && make
+up` reproduces the platform on a clean machine").
+
+=== sequence ===
+$ make down
+[k3d] Deleting cluster 'palisade'... Successfully deleted cluster palisade!
+
+$ make up
+==> Preflight: ok (docker + k3d, WSL2/CDI, node image)
+==> Creating k3d cluster 'palisade' (profile: lite)
+==> Waiting for the node to become Ready: ok
+==> Waiting for the nvidia RuntimeClass: ok
+==> Generating the CDI spec: ok
+==> Cluster ready
+
+$ make gpu-check
+PASS: the scheduler placed this pod and it can drive the GPU.
+M0 ACCEPTANCE PASSED - Kubernetes scheduled a pod that can see the GPU.
+
+$ make gitops
+1/6 age key for the SOPS plugin: ok
+2/6 Argo CD + Kyverno (Terraform Helm provider): applied
+3/6 Kyverno and Argo CD Available: ok
+4/6 vLLM image pre-pull: pulled (fresh node, full download - this step
+    alone took the bulk of the rebuild's wall-clock time, as expected
+    for an uncached multi-gigabyte image)
+5/6 root Application (app-of-apps)
+6/6 wait until every Application is Synced + Healthy
+
+=== final state ===
+$ kubectl -n argocd get applications.argoproj.io
+NAME                              SYNC STATUS   HEALTH STATUS
+palisade                         Synced        Healthy
+palisade-observability           Synced        Healthy
+palisade-observability-secrets   Synced        Healthy
+palisade-policies                Synced        Healthy
+palisade-secrets                 Synced        Healthy
+root                              Synced        Healthy
+
+$ kubectl get pods -A
+(all Running/Completed as expected - gateway, vLLM, Redis, Kyverno,
+Argo CD, Prometheus, Grafana, gpu-exporter, kube-state-metrics,
+model-verify Completed)
+
+Confirmed on this rebuild specifically (not just "the cluster came
+up"):
+- The gateway's deployed image digest is sha256:f1ef281b..., the
+  digest carrying both chaos-day fixes (RemoteProtocolError,
+  RedisError) - the fixes are in the chart's committed values, not
+  something that only existed on the previous cluster's live state.
+- All 7 Prometheus alert rules loaded, including
+  PalisadeGPUMemoryPressure (added after chaos day found the gap) -
+  no sync-lag this time, since the rule was already in the ConfigMap
+  from the first apply rather than added to a running cluster
+  mid-session (see deploy/observability/prometheus-config.yaml's own
+  header comment for that separate, real gotcha found earlier in the
+  session).
+- A real end-to-end request against the rebuilt stack: POST
+  /v1/chat/completions, HTTP 200, a real generated completion
+  ("OK, that's a"), not a cached or stubbed response.
+
+This is the actual verification this project's CLAUDE.md calls for -
+"Test from scratch, not incrementally" - run after every milestone's
+substantive work, not assumed from a cluster that has been running and
+accumulating live-patched state across an entire chaos day.
