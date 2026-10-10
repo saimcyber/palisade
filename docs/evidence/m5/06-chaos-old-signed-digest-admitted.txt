@@ -7,7 +7,7 @@ really built and signed by ci.yml, before any of M4's features
 existed, is let through the same as the current one.
 
 Digest used: sha256:d8a0af80253621922cb9d320691a2ce74a027d6ba5fadc67ff2ea6acfa5b891e
-- the exact digest from 7fd661b (the last gateway bump before 953d3f5,
+- the exact digest from b444021 (the last gateway bump before c60c80c,
 "m4: per-tenant budgets, rate limits, response cache, prompt guard...")
 and also the one used as the positive control in M3's own unsigned-
 image negative control (docs/evidence/m3/03-unsigned-image-refused.txt)

@@ -1,5 +1,13 @@
 # M3 acceptance (part 1): a push to git deploys itself
 # No kubectl apply, no argocd sync, no manual refresh - git push only.
+#
+# Note: the commit hashes quoted verbatim below (04f04c4..., a21ef3e...)
+# are reproduced exactly as the terminal printed them at the time. A
+# later history rewrite stripping AI-attribution trailers from every
+# commit message gave these two commits new hashes - 3a48b40... and
+# 494a2e8... respectively - so a `git show` against the hash literally
+# printed below will no longer resolve on the current main. The
+# transcript itself is left unedited; only this note is new.
 
 ## BEFORE - live gateway env (prefix bug: PALISADE_* vars absent)
 $ kubectl -n palisade exec deploy/palisade-gateway -- env | grep -c ^PALISADE_
