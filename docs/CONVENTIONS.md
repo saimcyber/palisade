@@ -121,8 +121,8 @@ problem, since the package was already correctly linked and public.
 ```
 services/        gateway (FastAPI) and model runtime (vLLM)
 infra/terraform/ AWS (S3, IAM, OIDC) and cluster add-ons
-deploy/          Helm chart, Argo CD apps, Kyverno policies, SOPS secrets
-observability/   Grafana dashboards, Prometheus alert rules
+deploy/                Helm chart, Argo CD apps, Kyverno policies, SOPS secrets
+deploy/observability/  Grafana dashboards, Prometheus alert rules
 docker/          GPU-capable k3s node image
 scripts/         lifecycle and verification
 k8s/             standalone manifests
