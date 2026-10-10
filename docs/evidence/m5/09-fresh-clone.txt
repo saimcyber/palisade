@@ -20,7 +20,9 @@ actual `git clone` of the URL in the README:
   43c8eab docs: M5 clean-rebuild acceptance pass
 
 Matches the tip of main at the time - the clone is real, not a cached
-mirror.
+mirror. (Note: a later history rewrite stripping AI-attribution
+trailers gave this commit a new hash, 723fd17... - the line above is
+left exactly as it printed at the time.)
 
 === gateway test suite ===
 A fresh Python virtualenv, dependencies installed only from this
