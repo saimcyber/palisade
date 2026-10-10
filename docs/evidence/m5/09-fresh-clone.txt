@@ -1,0 +1,57 @@
+M5 verification: a fresh clone, not a copy of local state
+
+CLAUDE.md's "finished" definition includes the acceptance command
+passing from a clean rebuild, and M5's own acceptance line calls for
+"a stranger can understand the project without you in the room". A
+clean-rebuild test against the working copy (docs/evidence/m5/08-*)
+proves the chart/config is reproducible, but it does not prove the
+repository itself is complete - a locally-cached dependency, an
+untracked helper script, or a reference to a file that only exists on
+this machine would pass that test and still break for someone cloning
+fresh from GitHub.
+
+=== method ===
+Cloned directly from the public remote into a scratch directory with
+no relationship to the working copy - not a filesystem copy, an
+actual `git clone` of the URL in the README:
+
+  $ git clone https://github.com/saimcyber/palisade.git /tmp/palisade-freshclone
+  $ cd /tmp/palisade-freshclone && git log --oneline -1
+  43c8eab docs: M5 clean-rebuild acceptance pass
+
+Matches the tip of main at the time - the clone is real, not a cached
+mirror.
+
+=== gateway test suite ===
+A fresh Python virtualenv, dependencies installed only from this
+clone's own requirements-dev.txt, no reuse of the working copy's
+installed packages:
+
+  $ python3 -m venv ~/freshvenv
+  $ ~/freshvenv/bin/pip install -q -r services/gateway/requirements-dev.txt
+  $ cd services/gateway && ~/freshvenv/bin/python -m pytest -q
+  ...................s.....................................  [100%]
+  56 passed, 1 skipped, 1 warning in 1.52s
+
+All 56 tests pass with zero environment-specific setup beyond what the
+repo itself declares.
+
+=== environment check ===
+scripts/doctor.sh ran cleanly against the fresh clone's own copy of
+the script (not the working copy's) - 29 checks passed, 1 informational
+warning (CUDA compute not checked by this particular script, by
+design - a separate make target), 0 failed.
+
+=== what this does not cover ===
+It does not re-run `make up`/`make gitops` against a second cluster -
+this machine has one GPU, and the clean-rebuild test
+(docs/evidence/m5/08-*) already exercises that exact path against the
+same chart/config this clone carries. It also does not exercise the
+documented fork-reproduction path (a new age key, re-encrypting the
+gateway Secret, pointing Argo CD at a different remote) - that is a
+real manual step this repo's own README documents as required and
+does not pretend is automatic.
+
+Cleanup: the scratch clone, its virtualenv, and all temp output files
+were removed after this check; nothing from this verification was left
+on disk.

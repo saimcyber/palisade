@@ -5,9 +5,10 @@ GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
 > Status: **M5 in progress — resilience and proof.** Chaos day, the load
-> test, and all five engineering documents below are done; a clean-rebuild
-> acceptance pass and the milestone's own Word doc are not yet — see the
-> [status table](#status) for exactly what's left. A signed image built from
+> test, all five engineering documents below, and a clean-rebuild
+> acceptance pass are done; the Cloudflare Tunnel demo and the milestone's
+> own Word doc are not yet — see the [status table](#status) for exactly
+> what's left. A signed image built from
 > the wrong GitHub Actions workflow is refused by Kyverno exactly like an
 > unsigned one, even though the signature itself is real —
 > [recorded run](docs/evidence/m5/05-chaos-wrong-identity-signature.txt). Two
@@ -56,7 +57,7 @@ a real signature isn't enough; it has to be *this repo's* signature.
 | M2 Supply chain & CI/CD | Complete — signed, SBOM-attested image on ghcr.io; OIDC-only AWS access |
 | M3 Kubernetes, GitOps & policy | Complete — push deploys itself; unsigned image refused; verified from a clean rebuild |
 | M4 Platform & observability | Complete — per-tenant budgets/rate limits enforced live; Prometheus+Grafana+alerts running, verified from a clean rebuild |
-| M5 Resilience & proof | **In progress.** Done: k6 saturation test in CI, chaos day (5 experiments, 2 real bugs found/fixed/verified live), load shedding, all five docs (`ARCHITECTURE`/`THREAT-MODEL`/`SLO`/`RUNBOOK`/`COST`), the blameless postmortem, the GPU memory alert chaos day found missing, and a full `make down && make up && make gitops` clean-rebuild verification — [recorded run](docs/evidence/m5/08-clean-rebuild.txt). Not yet done: the Cloudflare Tunnel demo, the M5 engineering Word doc, and a fresh-clone verification from a path that has never seen this project's age key or GHCR identity. The demo video called for in the plan is deliberately deferred. |
+| M5 Resilience & proof | **In progress.** Done: k6 saturation test in CI, chaos day (5 experiments, 2 real bugs found/fixed/verified live), load shedding, all five docs (`ARCHITECTURE`/`THREAT-MODEL`/`SLO`/`RUNBOOK`/`COST`), the blameless postmortem, the GPU memory alert chaos day found missing, a full `make down && make up && make gitops` clean-rebuild verification ([run](docs/evidence/m5/08-clean-rebuild.txt)), and a fresh clone from GitHub with its own test suite and environment check passing clean ([run](docs/evidence/m5/09-fresh-clone.txt)). Not yet done: the Cloudflare Tunnel demo and the M5 engineering Word doc. The demo video called for in the plan is deliberately deferred. |
 
 
 
