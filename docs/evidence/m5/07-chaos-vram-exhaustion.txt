@@ -1,85 +1,117 @@
 Chaos experiment 5: VRAM exhaustion (hypothesis in chaos-hypotheses.md)
 
-Result: the hypothesis was wrong, and wrong in the interesting
-direction - this configuration turned out to be far more resilient to
-VRAM pressure than CLAUDE.md's own prior finding predicted, not less.
-No OOM crash loop was ever produced; three escalating attempts all
-ended in vLLM successfully starting and serving real tokens.
+Result: the hypothesis predicted a hard failure (`torch.OutOfMemoryError`,
+a crash loop). That did not happen. The first write-up of this
+experiment concluded vLLM was simply "more resilient than expected" -
+that conclusion did not survive a second look at the numbers (see
+"what the first write-up got wrong" below) and has been replaced with
+a verified mechanism: on this machine, VRAM exhaustion fails *soft*,
+not hard, because of a Windows/WDDM driver behavior that a native
+Linux host does not have.
 
 Method: scaled vLLM to 0 replicas (freeing the whole card), started a
-scratch Pod (reusing the already-pulled vllm/vllm-openai:v0.28.0 image,
-so no new image pull - with the same CDI annotation, runtimeClassName,
+scratch Pod (reusing the already-pulled vllm/vllm-openai:v0.28.0 image
+- no new image pull - with the same CDI annotation, runtimeClassName,
 and baseline security context as the real vLLM Deployment) that
 allocates a fixed block of GPU memory with `torch.zeros(..., device=
 "cuda")` and holds it, then scaled vLLM back to 1 replica to see
 whether it would fit.
 
 === attempt 1: hog = 512 MiB, held while vLLM was still running ===
-Reasoning at the time: CLAUDE.md records that the in-cluster
---kv-cache-memory-bytes=512M fix left only a ~30-50 MiB margin during
-the original M1 investigation, so a small hog seemed sufficient.
-Abandoned before testing - the arithmetic doesn't actually work: vLLM's
-own ~2.6 GiB would be freed by deleting its pod, more than offsetting a
-512 MiB hog on a 4096 MiB card. Scaled vLLM to 0 instead, to control
-the free-memory budget directly rather than fighting a restart race.
+Abandoned before testing - deleting vLLM's pod would free its own
+~2.6 GiB, more than offsetting a 512 MiB hog on a 4096 MiB card.
+Scaled vLLM to 0 instead, to control the free-memory budget directly.
 
 === attempt 2: hog = 2.3 GiB, vLLM scaled 0 -> 1 ===
-nvidia-smi before scale-up: 2435 MiB used (hog only), 1528 MiB free -
-below vLLM's observed ~2.6 GiB steady-state footprint.
-Expected: OOM. Actual: vLLM started cleanly (1/1 Ready, 0 restarts) and
-served a real request (HTTP_CODE=200). Afterward: 3852 MiB used total,
-111 MiB free - vLLM's actual footprint here was roughly 1.4-1.5 GiB,
-far below its usual ~2.6 GiB, meaning the 2.6 GiB figure includes
-caching-allocator headroom that isn't strictly required, not a hard
-floor.
+nvidia-smi before scale-up: 2435 MiB used (hog only), 1528 MiB free.
+vLLM started cleanly (1/1 Ready, 0 restarts) and served a real request
+(HTTP 200). nvidia-smi afterward: 3852 MiB used, 111 MiB free.
 
 === attempt 3: hog = 3.6 GiB, vLLM scaled 0 -> 1 ===
-nvidia-smi before scale-up: 196 MiB free.
-Expected (now revised downward, but still expecting failure this low):
-OOM. Actual: vLLM again started cleanly (1/1 Ready, 0 restarts) after
-its normal weight-loading sequence (visible in logs: "Checkpoint size:
-1.40 GiB... Loading safetensors checkpoint shards"), and the card
-settled at 77 MiB free, 3886 MiB used. A real generation request
-(max_tokens=100, "write a long story about a dog") returned a complete
-100-token response with HTTP_CODE=200 - not just a clean startup, a
-genuine, correct inference under near-zero VRAM headroom.
+nvidia-smi before scale-up: 196 MiB free. vLLM again started cleanly
+and a real generation request (max_tokens=100) returned a complete
+100-token response (HTTP 200, request_id b210440d..., duration_ms
+3383.4 per the gateway's own audit log). nvidia-smi afterward: 3886
+MiB used, 77 MiB free.
 
-Why this diverges from CLAUDE.md's prior finding: the earlier M1-era
-failures ("needing only 30-50 MiB more") happened *before* the
---kv-cache-memory-bytes=512M fix was applied cleanly - they were
-failures of vLLM's percentage-based KV-cache auto-sizing math reading
-a skewed number in the nested k3d-node-container CDI path. Once the KV
-cache size is stated as a literal byte count instead of a percentage,
-allocation becomes a fixed, explicit reservation checked once at
-startup, not an elastic calculation vulnerable to that skew - so the
-real headroom this configuration needs is much smaller than the
-historical failure suggested, and, more importantly, predictable: it
-either fits at startup or it doesn't, with no further growth risk once
-serving begins (consistent with the KV cache being pre-reserved rather
-than grown lazily per request).
+=== what the first write-up got wrong ===
+The first version of this file concluded vLLM's "real minimum
+footprint" was far smaller than its ~2.6 GiB steady-state figure,
+because nvidia-smi's "used" total only grew by ~119 MiB between
+attempt 2 and attempt 3 (3852 -> 3886) despite vLLM needing to load a
+1.40 GiB checkpoint (per its own startup log) plus a fixed 512 MiB
+KV-cache reservation. Those two numbers cannot both be true - a model
+that size cannot run in under 120 MiB of *additional* dedicated VRAM.
+nvidia-smi's "used" figure was not accounting for everything using the
+card.
 
-Recovery, for the record (never needed - nothing crashed): delete the
-hog Pod, confirm nvidia-smi free memory returns to baseline. No `make
-gpu-cdi` re-run, no Docker Desktop restart, no host GPU reset were
-required at any point in this experiment - GPU memory was reclaimed
-cleanly on every hog-pod deletion.
+=== the real mechanism, verified ===
+Windows' own GPU performance counters (`Get-Counter`) show what
+nvidia-smi does not - a second memory pool, "Shared Usage" (host RAM
+borrowed by the GPU driver), alongside "Dedicated Usage" (the real
+VRAM nvidia-smi reports):
 
-=== post-experiment cluster state ===
-nvidia-smi: 2615 MiB used, 1348 MiB free (identical to the pre-
-experiment baseline)
-kubectl get pods -n palisade: gateway, redis, vllm all 1/1 Running, 0
-new restarts attributable to this experiment
+  baseline (nothing running):
+    dedicated = 425,754,624 B (~406 MiB - driver/desktop baseline)
+    shared    =  94,633,984 B (~90 MiB)
+
+  hog alone (3.6 GiB allocated):
+    dedicated = 3,953,840,128 B (~3770 MiB - matches nvidia-smi's 3767 MiB)
+    shared    =  79,953,920 B (~76 MiB - unchanged, confirming the hog
+                itself stayed in real VRAM)
+
+  vLLM scaled back up, mid-startup and at steady state (identical both times):
+    dedicated = 4,082,532,352 B (~3893 MiB - the card, maxed)
+    shared    = 2,321,809,408 B (~2214 MiB - up from ~76 MiB baseline)
+
+That ~2.2 GiB jump in Shared Usage, with no further room in Dedicated,
+is the WDDM driver's CUDA system-memory fallback: when a new
+allocation doesn't fit in dedicated VRAM, Windows pages the least
+recently touched allocation out to host RAM instead of returning
+cudaErrorMemoryAllocation. The amount paged out (~2.2 GiB) is close to
+the hog's own size (3.6 GiB) adjusted for vLLM's real footprint - i.e.
+the driver evicted the *idle* hog, not the actively-computing vLLM
+process, to make room.
+
+This also explains why the hypothesis's predicted latency cliff did
+not clearly appear: a cold, cache-miss request during the hog-holding
+state measured 3383.4 ms; an equivalent cold request once the hog was
+removed measured 3078.4 ms. A ~10% difference, not a cliff - consistent
+with vLLM's own working set staying resident in real, fast VRAM while
+only the unrelated, inactive hog got relegated to the slower shared
+pool. Native Linux has no WDDM layer and no such fallback; the same
+test on bare-metal Linux would very likely produce the
+`torch.OutOfMemoryError` crash loop the hypothesis predicted. This
+machine's WSL2/Windows stack was not a neutral test environment for
+this specific experiment, and that is itself worth recording, not
+smoothing over.
+
+=== alerting gap found along the way ===
+Prometheus's own retained metrics put the peak `nvidia_smi_memory_used_
+bytes / nvidia_smi_memory_total_bytes` ratio during this test at
+~95.4% (3910 MiB / 4096 MiB) - right at the edge of what would be
+"saturated" by any reasonable definition. No alert fired, because the
+only GPU alert that exists, `PalisadeGPUSaturated`, checks
+`nvidia_smi_utilization_gpu_ratio` (compute busy-ness) `> 0.95` for 10
+minutes - there is no alert on GPU *memory* pressure at all. This
+platform would not have paged anyone if this experiment had gone
+worse. Noted here as a finding, not yet fixed; a real memory-ratio
+alert is a reasonable follow-up, out of scope for this chaos day.
+
+=== recovery ===
+Deleting the hog Pod was sufficient every time; nvidia-smi's reported
+free memory returned to the exact pre-experiment baseline (2615 MiB
+used, 1348 MiB free) with no Docker Desktop restart, no `make gpu-cdi`
+re-run, and no host-level GPU reset needed at any point. No pod in the
+palisade namespace gained a restart attributable to this experiment;
+`PalisadeRestartLoop` never had cause to fire.
 
 Conclusion: the acceptance criterion for this experiment was "capture
-what actually happens," not "reproduce a crash." What actually happens
-is that this specific configuration (Qwen3-0.6B, --enforce-eager,
---kv-cache-memory-bytes=512M, --gpu-memory-utilization=0.6 as a ceiling
-rather than a reservation) is substantially more VRAM-resilient than
-the 4 GiB ceiling and the M1-era failure history suggested. A genuine
-OOM crash loop was not reproduced in this session despite three
-escalating attempts; reproducing one would need either a far larger
-competing allocation than tested here, a larger model, or disabling
---enforce-eager (CUDA graphs reserve additional memory up front) - none
-of which this session pursued further, since the honest result -
-"this is more robust than documented, not less" - is itself the
-valuable finding.
+what actually happens," not "reproduce a crash." What actually happens,
+on this specific host, is a soft degradation mediated by the Windows
+driver's own memory-pressure handling, not the hard OOM the hypothesis
+predicted - and that distinction matters for anyone reading this as a
+production-readiness signal: the resilience observed here is a
+property of running under WSL2/WDDM, not of this deployment's own
+design, and should not be read as "this configuration tolerates
+running out of VRAM" on any other host.
