@@ -1,4 +1,12 @@
 {{- if .Values.gateway.ingress.enabled }}
+# An explicit allowlist, not `path: /`. The gateway serves /metrics,
+# /readyz, /docs and /openapi.json on the same port as the API, with no
+# auth on any of them - fine inside the cluster (Prometheus scrapes the
+# Service directly, never this Ingress), not fine at the edge: /metrics
+# carries every tenant's name, token spend and remaining budget. Found
+# while preparing the M5 Cloudflare Tunnel, which fronts this Ingress -
+# routing `/` would have published all of it (docs/adr/0026). Anything
+# not listed here gets Traefik's own 404 and never reaches the gateway.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,8 +20,15 @@ spec:
     - host: {{ .Values.gateway.ingress.host }}
       http:
         paths:
-          - path: /
+          - path: /v1
             pathType: Prefix
+            backend:
+              service:
+                name: palisade-gateway
+                port:
+                  name: http
+          - path: /healthz
+            pathType: Exact
             backend:
               service:
                 name: palisade-gateway
