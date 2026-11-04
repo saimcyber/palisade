@@ -77,8 +77,20 @@ if k3d cluster list 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER"; then
   RUNNING="$(k3d cluster list "$CLUSTER" --no-headers 2>/dev/null | awk '{print $2}')"
   if [ "${RUNNING%/*}" = "0" ]; then
     note "cluster exists but its nodes are stopped - starting it"
-    k3d cluster start "$CLUSTER"
-    ok "cluster started"
+    # Bounded, because `k3d cluster start` was seen hanging indefinitely - three
+    # times, after Docker Desktop restarts - on its very last step ("Injecting
+    # records for hostAliases ... into CoreDNS configmap"), with the node, the
+    # load balancer and the API server already fully up. Nothing in this
+    # platform resolves host.k3d.internal or the other injected names, so a
+    # start that times out on that step is still a usable cluster - but only if
+    # the API actually answers, which is checked rather than assumed.
+    if timeout 180 k3d cluster start "$CLUSTER"; then
+      ok "cluster started"
+    elif kubectl --context "k3d-${CLUSTER}" get nodes >/dev/null 2>&1; then
+      note "k3d start did not finish its CoreDNS host-record step, but the API server answers - continuing"
+    else
+      die "k3d cluster start timed out and the API server is not reachable"
+    fi
   fi
 else
   step "Creating k3d cluster '$CLUSTER' (profile: $PROFILE)"
