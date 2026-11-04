@@ -38,3 +38,26 @@ spec:
           spec:
             containers:
               - image: "!*:latest"
+    # The rule above is not enough on its own, found by the M5 demo. For
+    # every image verify-palisade-image-signatures matches (this project's
+    # own ghcr.io/saimcyber/palisade-* images - the ones that matter most),
+    # Kyverno's verifyImages runs in the *mutating* webhook and, with its
+    # default mutateDigest, rewrites `repo:latest` to
+    # `repo:latest@sha256:<digest>` before any validate rule sees the pod.
+    # That string doesn't end in ':latest', so the pattern above passed it.
+    # The pinned digest is still a verified, signed build - but a floating
+    # tag in desired state is exactly what this policy exists to refuse.
+    # Two separate rules rather than one '!*:latest*' pattern, so a real
+    # tag like 'latest-gpu' isn't refused by accident.
+    - name: disallow-latest-tag-after-digest-pinning
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      validate:
+        failureAction: Enforce
+        message: "Using the mutable ':latest' tag is not allowed (even once pinned to a digest)."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest@*"
