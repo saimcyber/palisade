@@ -7,7 +7,8 @@ repository and the evidence that it works, not just that it was
 intended to.
 
 **Scope.** The gateway, vLLM, Redis, the Kubernetes cluster and its
-policies, the CI/CD pipeline, and the planned Cloudflare Tunnel. Out of
+policies, the CI/CD pipeline, and the opt-in Cloudflare Quick Tunnel
+demo (ADR 0026). Out of
 scope: the Windows/WSL2 host OS, Docker Desktop itself, and GitHub's own
 infrastructure - all trusted boundaries this project depends on but
 does not control.
@@ -27,13 +28,15 @@ does not control.
 | An image is modified after signing (registry compromise, MITM) | Cosign signature verification at admission, scoped per-namespace, enforced (`failureAction: Enforce`) | `docs/evidence/m3/03-unsigned-image-refused.txt`, `docs/evidence/m4/06-*` |
 | Model weights are poisoned or substituted | `model-verify` Job checks a keyless-signed SHA-256 manifest against every downloaded file before vLLM ever starts, and fails closed | ADR 0012 |
 | The live cluster is changed by hand, bypassing Git | Argo CD's `selfHeal` reverts any drift on the next reconcile | `docs/evidence/m3/05-argocd-self-heal.txt` |
-| A request body is tampered with in transit | Not mitigated for the local Ingress (plain HTTP on localhost - a stated M3 limitation); the planned Cloudflare Tunnel terminates TLS at Cloudflare's edge, which covers the public path |  |
+| A request body is tampered with in transit | Not mitigated for the local Ingress (plain HTTP on localhost - a stated M3 limitation); the public path, the Cloudflare Quick Tunnel, terminates TLS 1.3 at Cloudflare's edge, and `cloudflared` reaches that edge over its own encrypted QUIC/HTTP2 connection | `docs/evidence/m5/10-public-tunnel.txt` |
+| A floating tag (`:latest`) lets a different build run later than the one reviewed | `disallow-latest-tag`, including a second rule for the `repo:latest@sha256:...` form Kyverno's own digest pinning produces - without it, `:latest` was admitted for exactly this project's own signed images | `deploy/policies/kyverno-disallow-latest-tag.yaml`, `make demo` §6 |
 
 ## Repudiation
 
 | Threat | Control | Evidence |
 | --- | --- | --- |
 | No record of which tenant did what, or why a request was refused | One structured `chat_completion_settled` audit line per request, at every terminal outcome (success, every rejection reason, every error) - tenant, outcome, status, token counts, duration | `app/routes/chat.py::_audit`, `docs/evidence/m4/07-streaming-live.txt` |
+| The audit record itself is wrong - a failed request logged as a success | Every upstream failure mode found so far maps to `upstream_error`: an abrupt mid-stream disconnect, vLLM's own in-band `{"error": ...}` event on a graceful shutdown, and an unreachable Redis (audited `redis_unavailable`, not a bare 500 with no line at all) | `docs/POSTMORTEM-001.md`, `tests/test_streaming.py`, `tests/test_redis_unavailable.py` |
 | A cluster change has no record of who/why | Every change is a Git commit; ADRs record the decision at the time it was made, not reconstructed after | `docs/adr/` |
 | **Gap**: audit lines are container stdout only - nothing ships them anywhere durable | Not mitigated. A real deployment would need a log pipeline (Loki, CloudWatch, anything); this one relies on `kubectl logs` still having the data, which rotates |  |
 
@@ -44,7 +47,8 @@ does not control.
 | Tenant A receives tenant B's cached answer | The response cache key includes the tenant's hash - no two tenants can ever share an entry | `app/cache.py`, `tests/test_cache.py::test_different_tenants_never_share_a_cache_entry` |
 | A prompt containing PII (email, SSN, card number) is forwarded to the model or appears in a log | The prompt guard redacts these patterns before the request leaves the gateway; the audit log never contains prompt content at all, by construction | ADR 0022, `tests/test_privacy.py` |
 | Secrets (API keys, tenant config, Grafana's admin password) committed in plaintext | SOPS + age - only encrypted values are ever committed; the private key never enters Git | ADR 0015 |
-| Prometheus/Grafana internals exposed on the public tunnel | The tunnel (once live) exposes the gateway's `/v1/*` routes only - `/metrics`, Grafana, and Prometheus are never routed through it | `docs/evidence/m5/` (tunnel evidence) |
+| Gateway internals (`/metrics` - every tenant's name, spend and remaining budget - plus `/docs`, `/openapi.json`, `/readyz`) reachable from the edge | The Ingress is an explicit allowlist: `/v1` (Prefix) and `/healthz` (Exact); everything else is Traefik's own 404 and never reaches the gateway. It routed `/` until M5 - found and fixed before the public tunnel, which fronts this Ingress, ever ran. Grafana and Prometheus are never routed through it at all | `deploy/charts/palisade/templates/gateway-ingress.yaml`, `docs/evidence/m5/10-public-tunnel.txt` |
+| **Gap**: any valid key works through the public tunnel, not only the demo key | Not enforced - only `tenant-public`'s key (10 req/min, 3000 tokens) is ever handed out, which is a procedure, not a control. Enforcing it needs an edge rule an account-less Quick Tunnel cannot carry | ADR 0026 |
 | A raw API key is recoverable from gateway memory or a core dump | Only the SHA-256 hash is ever held past the single `authenticate()` call - a dump of this process yields no usable credential | `app/auth.py` |
 
 ## Denial of Service
@@ -54,8 +58,8 @@ does not control.
 | One tenant exhausts the model's capacity, starving every other tenant (**token exhaustion as DoS** - the plan names this explicitly) | Per-tenant token budgets, checked and reserved *before* the GPU is touched - confirmed live: tenant-b exhausted while tenant-a stayed at 100% success | `docs/evidence/m4/08-two-tenants-k6-run-post-rebuild.txt` |
 | A tenant floods the gateway with requests | Sliding-window rate limit, atomic Lua reservation, race-tested | ADR 0021, `tests/test_tenancy.py` |
 | Too many requests queue behind a saturated vLLM, so every request eventually times out instead of a clean, fast failure | Load shedding: a bounded in-flight ceiling returns `503` immediately once saturated, rather than queueing indefinitely | ADR 0024, `tests/load/saturation.js`, `.github/workflows/load-test.yml` |
-| VRAM exhaustion crashes vLLM | Not prevented - `--kv-cache-memory-bytes` bounds normal operation, but a chaos-day test deliberately reproduces real exhaustion to record what actually happens | `docs/POSTMORTEM-001.md` |
-| Redis becomes unavailable, silently disabling budget/rate-limit enforcement | `/readyz` checks Redis reachability and fails closed - the gateway leaves rotation rather than serving with no limits enforced | `app/routes/health.py` |
+| VRAM exhaustion crashes vLLM | Not prevented - `--kv-cache-memory-bytes` bounds normal operation. Chaos day's deliberate exhaustion degraded *softly* on this host (the Windows driver backed the overflow with host RAM) rather than crashing, which would plausibly not hold on native Linux. `PalisadeGPUMemoryPressure` (>90% for 5m) now pages before that point - before chaos day, no alert watched GPU memory at all | `docs/evidence/m5/07-chaos-vram-exhaustion.txt` |
+| Redis becomes unavailable, silently disabling budget/rate-limit enforcement | `/readyz` checks Redis reachability and fails closed - the gateway leaves rotation rather than serving with no limits enforced; a request already in flight gets an audited `503 redis_unavailable` instead of being served unchecked | `app/routes/health.py`, `docs/evidence/m5/03-chaos-redis-pause.txt` |
 
 ## Elevation of Privilege
 

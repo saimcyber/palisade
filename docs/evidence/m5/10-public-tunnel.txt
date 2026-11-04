@@ -1,0 +1,110 @@
+M5: the public demo tunnel - what an outsider can and cannot reach
+
+`make tunnel` (scripts/tunnel.sh, docs/adr/0026) puts the gateway on a
+Cloudflare Quick Tunnel - an https://<random>.trycloudflare.com URL, no
+Cloudflare account, no token, new hostname every start. It points at the
+real Traefik Ingress, so the public path gets exactly the Ingress
+allowlist and nothing else.
+
+=== found before the tunnel ever went live ===
+The Ingress used to route `/` to the gateway, which serves /metrics,
+/readyz, /docs and /openapi.json on the same port with no auth. Probed
+through Traefik before any public exposure:
+
+  /healthz        200
+  /readyz         200
+  /metrics        200  # HELP python_gc_objects_collected_total ...
+  /v1/models      401
+  /docs           200  <!DOCTYPE html> ... (Swagger UI)
+  /openapi.json   200  {"openapi":"3.1.0", ... the full API surface
+
+/metrics carries every tenant's name, token spend and remaining budget.
+Tunnelling that Ingress as it stood would have published all of it -
+and docs/THREAT-MODEL.md already claimed the tunnel would expose /v1/*
+only, a claim that was not yet true. Fixed by changing the Ingress from
+`path: /` to an explicit allowlist (/v1 Prefix, /healthz Exact), commit
+48cf77a, deployed by Argo CD with no manual apply. Prometheus scrapes
+the Service directly, so all five scrape targets stayed `up`.
+
+=== from the public internet, after the fix ===
+  public URL: https://indicated-applications-nose-reserve.trycloudflare.com
+  (ephemeral - it stopped existing when the tunnel was stopped)
+
+TLS, terminated at Cloudflare's edge:
+  SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519
+  subject: CN=trycloudflare.com
+  issuer: C=US; O=Google Trust Services; CN=WE1
+
+Routes reachable from the internet:
+  /healthz       200
+  /metrics       404     <- Traefik's own 404; the gateway never sees it
+  /readyz        404
+  /docs          404
+  /openapi.json  404
+  /v1/models     401     <- reachable, but authenticated
+
+No key:                         401
+tenant-public completion:       200 "The planet closest to the Sun is **Mercury**." | usage: 20 + 13
+
+Streaming over the tunnel - milliseconds since request start, per chunk:
+  +191ms ''  +222ms 'One'  +252ms ','  +282ms ' two'  +328ms ','
+  +369ms ' three'  ...  +583ms ' six'  +611ms '.'  +640ms (usage chunk)
+Incremental, not buffered: the first token arrives at ~0.2s and each
+subsequent one ~30-40ms later, the same cadence as on localhost.
+
+tenant-public rate limit over the tunnel, 13 requests back to back
+(configured limit: 10 per minute):
+  200 200 200 200 200 200 200 200 200 200 429 429 429
+Gateway audit lines for those requests:
+  12 "outcome": "ok", "status": 200
+   3 "outcome": "rate_limited", "status": 429
+
+=== a slow first attempt, and why ===
+The first `make tunnel` failed:
+  failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel":
+  context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+and the script's first version then printed https://api.trycloudflare.com
+as if it were the assigned URL - its regex matched the API endpoint inside
+the error message. Both fixed in scripts/tunnel.sh: the API hostname is
+excluded explicitly, a failed request is reported as a failure, and the
+request is retried at most three times before giving up.
+
+A first verification pass then saw a ~30s time-to-first-token and
+requests that landed ~15-20s apart - which also made a 14-request burst
+look like the rate limit wasn't working (the requests were spread over
+more than a minute, so no 60s window ever held more than 10). Broken down
+with curl's timing variables, every other request spent ~20s in TCP
+connect and then completed normally:
+
+  connect=0.031s  ttfb=0.13s   code=200
+  connect=20.03s  ttfb=20.13s  code=200   <- alternating
+
+The tunnel hostname (and api.trycloudflare.com) resolve to two Cloudflare
+anycast addresses. Tested one at a time:
+
+  104.16.230.132  connect timeout   - from WSL and from Windows (TcpTestSucceeded=False)
+  104.16.231.132  connect 0.025s    - code 200
+
+So one Cloudflare edge address is unreachable from this development
+laptop's network specifically. That is the operator's own outbound path
+(ISP routing or a local network filter), not the tunnel or the platform:
+cloudflared's own connections to the edge passed all of its prechecks
+(QUIC and HTTP/2 to region1/region2.v2.argotunnel.com), and the same
+unreachable address explains the slow provisioning call above. The
+transcript above pins curl to the reachable address with --resolve so the
+platform's own behaviour is what gets measured. Not tested: reachability
+from a second, unrelated network - a visitor on a different ISP may well
+never see the delay, but that was not verified here. The gateway's rate
+limit was separately confirmed correct with 14 rapid requests through the
+local Ingress: exactly 10 allowed, then 429.
+
+=== what the tunnel does not do ===
+- It does not restrict *which* tenant can authenticate: any valid key
+  works through it, exactly as through the local Ingress. Only
+  tenant-public's key (10 req/min, 3000 tokens) is ever handed out; the
+  other keys never leave ~/.config/palisade/. A per-tunnel key allowlist
+  would need an edge rule (Cloudflare Access, or a Traefik middleware) -
+  out of scope for an account-less Quick Tunnel.
+- It is not always on. It runs only while an operator has `make tunnel`
+  up, and stops with `make tunnel-down` or when the host shuts down. It
+  was stopped after this transcript was captured.
