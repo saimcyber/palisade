@@ -26,7 +26,8 @@ else
 endif
 
 .PHONY: help doctor tools k3s-image up up-lite up-full down nuke gitops check-time \
-        gpu-cdi gpu-check cluster-info docs-export kubeconfig test test-alert-rules lint fmt clean
+        gpu-cdi gpu-check cluster-info docs-export kubeconfig test test-alert-rules lint fmt clean \
+        demo dashboards tunnel tunnel-status tunnel-down
 
 # --- meta --------------------------------------------------------------------
 
@@ -86,6 +87,24 @@ cluster-info: ## Show nodes, GPU capacity and running pods
 		| awk 'BEGIN{printf "%-24s %s\n","NODE","ALLOCATABLE GPUs"} {printf "%-24s %s\n", $$1, ($$2==""?"0":$$2)}'
 	@echo ""
 	@kubectl --context $(CTX) get pods -A
+
+# --- demo (M5) ---------------------------------------------------------------
+
+demo: ## End-to-end walkthrough against the live cluster (DEMO_CHAOS=0 skips the vLLM kill)
+	@bash scripts/demo.sh
+
+dashboards: ## Port-forward Grafana to http://localhost:3000 (Ctrl-C to stop)
+	@echo "Grafana -> http://localhost:3000  (user admin; password is key GF_SECURITY_ADMIN_PASSWORD of Secret monitoring/grafana-admin, SOPS-encrypted in deploy/observability-secrets/)"
+	@kubectl --context $(CTX) -n monitoring port-forward svc/grafana 3000:3000
+
+tunnel: ## Put the gateway on a public Cloudflare Quick Tunnel URL - opt-in, demo tenant only (ADR 0026)
+	@bash scripts/tunnel.sh up
+
+tunnel-status: ## Is the public tunnel up, and does its URL answer
+	@bash scripts/tunnel.sh status
+
+tunnel-down: ## Stop the public tunnel
+	@bash scripts/tunnel.sh down
 
 # --- documentation -----------------------------------------------------------
 

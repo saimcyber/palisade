@@ -27,6 +27,7 @@ AGE_VERSION="v1.3.2"
 YQ_VERSION="v4.53.6"
 ARGOCD_VERSION="v3.5.2"
 KUSTOMIZE_VERSION="v5.8.1"
+CLOUDFLARED_VERSION="2026.10.7"  # M5 demo tunnel only (docs/adr/0026)
 
 BIN=/usr/local/bin
 FORCE="${FORCE:-0}"
@@ -139,6 +140,12 @@ if needs kustomize "$KUSTOMIZE_VERSION" kustomize version; then
   curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar -xz -C "$TMP"
   sudo install -m 0755 "$TMP/kustomize" "$BIN/kustomize"; report kustomize "$KUSTOMIZE_VERSION"
 else skip "kustomize ${KUSTOMIZE_VERSION#v}"; fi
+
+# --- cloudflared (M5 demo tunnel - never part of the platform itself) ---------
+if needs cloudflared "$CLOUDFLARED_VERSION" cloudflared --version; then
+  curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" -o "$TMP/cloudflared"
+  sudo install -m 0755 "$TMP/cloudflared" "$BIN/cloudflared"; report cloudflared "$CLOUDFLARED_VERSION"
+else skip "cloudflared ${CLOUDFLARED_VERSION}"; fi
 
 # --- AWS CLI v2 (needed from M2 onwards) -------------------------------------
 # NOTE: `command -v aws` is not sufficient here. With WSL interop enabled the
