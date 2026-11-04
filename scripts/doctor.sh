@@ -124,6 +124,7 @@ check yq        yq --version
 check jq        jq --version
 check argocd    argocd version --client --short
 check kustomize kustomize version
+check cloudflared cloudflared --version
 check aws       aws --version
 check git       git --version
 check make      make --version
