@@ -1,6 +1,6 @@
 M5 acceptance: a clean rebuild reproduces the platform
 
-Per CLAUDE.md's "finished" definition - the acceptance command passes
+Per the project's "finished" definition (docs/CONVENTIONS.md) - the acceptance command passes
 from a clean rebuild, not from a machine that happens to be in a good
 state - and M5's own acceptance line in the plan ("`git clone && make
 up` reproduces the platform on a clean machine").
@@ -63,7 +63,7 @@ up"):
   /v1/chat/completions, HTTP 200, a real generated completion
   ("OK, that's a"), not a cached or stubbed response.
 
-This is the actual verification this project's CLAUDE.md calls for -
-"Test from scratch, not incrementally" - run after every milestone's
+This is the actual verification this project's conventions call for -
+"Test from a clean teardown, not incrementally" - run after every milestone's
 substantive work, not assumed from a cluster that has been running and
 accumulating live-patched state across an entire chaos day.

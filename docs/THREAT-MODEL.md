@@ -19,7 +19,7 @@ does not control.
 | --- | --- | --- |
 | A caller presents another tenant's identity | API keys are never stored in plaintext - only a SHA-256 hash is compared, and the raw key never outlives `auth.py`'s one function call | `app/auth.py`, ADR 0021 |
 | A build pipeline that isn't this repository's own CI produces a signature Kyverno accepts | Keyless cosign signing ties the signature to an exact GitHub OIDC identity: this repository, this workflow file, `refs/heads/main` - not a key anyone could copy | ADR 0008, `deploy/policies/kyverno-verify-signatures.yaml` |
-| GitHub's OIDC subject claim is matched against a stale/mutable format, letting a different repo's token pass | `use_immutable_subject` checked explicitly before any trust policy was written | ADR 0009, CLAUDE.md's OIDC note |
+| GitHub's OIDC subject claim is matched against a stale/mutable format, letting a different repo's token pass | `use_immutable_subject` checked explicitly before any trust policy was written | ADR 0009, docs/CONVENTIONS.md's OIDC note |
 
 ## Tampering
 

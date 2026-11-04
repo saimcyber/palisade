@@ -161,7 +161,7 @@ bad weights) or the gateway (unhandled exception, bad config).
 2. `kubectl logs -n palisade <pod> --previous` - the crashed instance's
    last log lines, not the new one's.
 3. If it's vLLM: check for `torch.OutOfMemoryError` specifically (see
-   CLAUDE.md's GPU gotchas - this has a known history on this
+   docs/CONVENTIONS.md's GPU notes - this has a known history on this
    hardware).
 
 **Likely fix:** Depends entirely on the crash reason found above. A

@@ -21,7 +21,7 @@ report a real bill.
 
 A `g5.xlarge` is the realistic floor for serving a model this size with
 real headroom - it has 6x this project's own VRAM. The RTX 3050's 4 GB
-is why Palisade runs a 0.6B model at all (CLAUDE.md's machine
+is why Palisade runs a 0.6B model at all (docs/CONVENTIONS.md's machine
 constraints); a cloud deployment of the same architecture would still
 want a GPU with meaningfully more VRAM than the exact minimum, for the
 same KV-cache-sizing reasons ADR 0002 and the M1 spike ran into

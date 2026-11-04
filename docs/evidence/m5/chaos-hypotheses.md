@@ -1,6 +1,6 @@
 # Chaos day - hypotheses, written before running anything
 
-Per CLAUDE.md's own working convention and the project's established
+Per the project's own working convention (docs/CONVENTIONS.md) and the project's established
 pattern: write the hypothesis down, then run the experiment, then
 record what actually happened - never adjust the hypothesis after
 seeing the result.
@@ -79,7 +79,7 @@ crash the process.
 allocation, or raise `--gpu-memory-utilization` past what's actually
 free).
 
-**Hypothesis:** Per CLAUDE.md's own prior finding, this fails as
+**Hypothesis:** Per the project's own prior finding (docs/CONVENTIONS.md), this fails as
 `torch.OutOfMemoryError` at KV-cache allocation, not a clean error the
 gateway can route around - the vLLM pod likely crash-loops.
 **Accepted risk, approved in advance:** recovery may need a Docker

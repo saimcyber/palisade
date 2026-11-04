@@ -64,7 +64,7 @@ up-full: ## Identical to up-lite - M4's observability stack measured small enoug
 check-time: ## Fail if a tracked file has a calendar date or schedule wording (project rule)
 	@! git grep -n -I -E '\b20[0-9]{2}-[01][0-9]-[0-3][0-9]\b|\b(Day|Days|Week|Weeks) [0-9]|\b[0-9]+ (working )?(days|weeks)\b|\bCompleted on\b' \
 	  -- ':!*.lock' ':!*.lock.hcl' ':!*.sigstore.json' ':!documentation/*.docx' ':!documentation/_build/verify_*.py' \
-	  || { echo "time references found (see CLAUDE.md: NO TIME REFERENCES)"; exit 1; }
+	  || { echo "time references found (see docs/CONVENTIONS.md: tracked by goal, not schedule)"; exit 1; }
 	@echo "check-time: clean"
 
 gitops: ## Bootstrap age key + Argo CD + Kyverno + root app, wait until all Synced (M3)

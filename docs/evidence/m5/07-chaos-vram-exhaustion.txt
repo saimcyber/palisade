@@ -60,7 +60,7 @@ any of this ran on and is excluded below.
                 chaos day)
     shared    =    94,633,984 B (~90 MiB)
   (the card with literally nothing running was never separately
-  measured in this session - not claimed here)
+  measured during this experiment - not claimed here)
 
   hog alone (3.6 GiB allocated, vLLM scaled to 0):
     dedicated = 3,953,840,128 B (~3770 MiB - matches nvidia-smi's 3767 MiB)

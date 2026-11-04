@@ -10,7 +10,7 @@
 #    2. Argo CD + Kyverno     - Terraform Helm provider (infra/terraform/cluster)
 #    3. Kyverno ready         - its webhooks must answer before anything
 #                               syncs, or the first pods are never checked
-#    4. vLLM image pre-pull   - optional speed-up; see CLAUDE.md for why it is
+#    4. vLLM image pre-pull   - optional speed-up; see docs/CONVENTIONS.md for why it is
 #                               `ctr pull` and not `k3d image import`
 #    5. root Application      - app-of-apps; policies (wave -1) -> secrets
 #                               (wave 0) -> workloads (wave 1), ADR 0020

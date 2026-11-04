@@ -1,5 +1,5 @@
 GPU exporter fix - confirmed live via scratch pods (zero cost, see
-CLAUDE.md's "scratch-namespace testing" pattern - no CI run, no cluster
+the project's "scratch-pod testing" pattern (docs/CONVENTIONS.md) - no CI run, no cluster
 disruption, immune to Argo CD self-heal reverting it)
 ================================================================================
 
