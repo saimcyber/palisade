@@ -141,10 +141,38 @@ async def stream_chat_completion(
                     payload = line.removeprefix("data:").strip()
                     try:
                         chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        chunk = None
+                    if isinstance(chunk, dict):
+                        if "error" in chunk:
+                            # vLLM reports a failure *inside* the stream - an
+                            # `{"error": {...}}` event, then a clean `[DONE]` -
+                            # when it shuts down gracefully mid-generation (a
+                            # `kubectl delete pod`'s SIGTERM). No exception
+                            # fires, so without this the stream "succeeds":
+                            # vLLM's raw error is relayed to the client and the
+                            # audit log says outcome="ok", status=200. Found by
+                            # the M5 demo's chaos step; the abrupt-disconnect
+                            # variant of the same failure is the
+                            # RemoteProtocolError handler below.
+                            err = chunk["error"]
+                            logger.warning(
+                                "upstream reported an error mid-stream",
+                                extra={
+                                    "extra_fields": {
+                                        "request_id": request_id,
+                                        "upstream_error": err.get("message", "")
+                                        if isinstance(err, dict)
+                                        else str(err),
+                                    }
+                                },
+                            )
+                            upstream_errors_total.labels(kind="stream_error").inc()
+                            raise UpstreamError(
+                                502, "Upstream model server failed mid-response"
+                            )
                         if chunk.get("usage"):
                             usage = chunk["usage"]
-                    except json.JSONDecodeError:
-                        pass
                 yield (line + "\n\n").encode("utf-8"), usage
     except httpx.ConnectError as exc:
         upstream_errors_total.labels(kind="connect").inc()

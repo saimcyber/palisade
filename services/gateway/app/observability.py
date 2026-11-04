@@ -109,7 +109,7 @@ upstream_in_flight = Gauge(
 upstream_errors_total = Counter(
     "palisade_upstream_errors_total",
     "Errors talking to the upstream model server",
-    ["kind"],  # timeout | connect | http_status
+    ["kind"],  # timeout | connect | http_status | disconnect | stream_error
 )
 
 auth_failures_total = Counter(
@@ -117,6 +117,36 @@ auth_failures_total = Counter(
     "Rejected authentication attempts",
     ["reason"],  # missing_header | malformed_header | unknown_key
 )
+
+
+def initialise_labelled_counters(tenant_names) -> None:
+    """Create every known labelled-counter series at 0, once, at startup.
+
+    increase()/rate() can only see a change between two samples. A labelled
+    series that doesn't exist until its first .inc() appears with its first
+    sample already at 1, so increase() reports 0 for it - which meant
+    PalisadeTenantBudgetExhausted could never fire on the first budget
+    rejection after a gateway restart. Found by the M5 demo: tenant-b was
+    refused, the counter read 1, the alert stayed silent. Gauges are
+    deliberately not touched - a gauge created at 0 would be a false value
+    ("no budget left"), where a missing counter series only means "nothing
+    counted yet".
+    """
+    for name in tenant_names:
+        budget_rejected_total.labels(tenant=name)
+        rate_limited_total.labels(tenant=name)
+        for direction in ("prompt", "completion"):
+            tenant_tokens_total.labels(tenant=name, direction=direction)
+    for reason in ("length_exceeded", "injection_suspected", "pii_redacted"):
+        prompt_guard_blocks_total.labels(reason=reason)
+    for kind in ("timeout", "connect", "http_status", "disconnect", "stream_error"):
+        upstream_errors_total.labels(kind=kind)
+    for reason in ("missing_header", "malformed_header", "unknown_key"):
+        auth_failures_total.labels(reason=reason)
+    for status in ("500", "502", "503", "504"):
+        http_requests_total.labels(
+            route="/v1/chat/completions", method="POST", status=status
+        )
 
 
 # --- structured JSON logging --------------------------------------------------

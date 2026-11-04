@@ -18,7 +18,12 @@ from starlette.responses import Response
 from .cache import ResponseCache
 from .config import settings
 from .loadshed import InFlightLimiter
-from .observability import configure_logging, new_request_id, request_id_var
+from .observability import (
+    configure_logging,
+    initialise_labelled_counters,
+    new_request_id,
+    request_id_var,
+)
 from .routes import chat, health
 from .tenancy import TenantStore, load_tenants
 from .upstream import make_client
@@ -29,6 +34,7 @@ async def lifespan(app: FastAPI):
     configure_logging()
     app.state.http_client = make_client()
     app.state.tenants = load_tenants()
+    initialise_labelled_counters(t.name for t in app.state.tenants.values())
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.tenant_store = TenantStore(app.state.redis)
     app.state.response_cache = ResponseCache(app.state.redis)

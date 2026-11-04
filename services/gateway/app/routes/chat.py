@@ -12,6 +12,7 @@ is protected by a series of progressively more expensive filters.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -253,7 +254,10 @@ async def _create_chat_completion(
                     yield chunk
             except UpstreamError as exc:
                 status_code = str(exc.status_code)
-                yield f'data: {{"error": "{exc.detail}"}}\n\n'.encode()
+                # json.dumps, not an f-string: exc.detail can carry vLLM's own
+                # JSON error body (the non-200 path), and interpolating that
+                # unescaped produced an event no client could parse.
+                yield f"data: {json.dumps({'error': exc.detail})}\n\n".encode()
             finally:
                 limiter.release()
                 upstream_in_flight.set(limiter.in_flight)
