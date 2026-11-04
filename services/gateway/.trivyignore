@@ -27,6 +27,13 @@ CVE-2026-78410
 # Python application never invokes. Debian status is fix_deferred.
 CVE-2026-9538
 
+# libsqlite3-0: DoS via heap buffer overflow on crafted SQLite input. Debian
+# status "affected", no fix shipped - present in both the previously pinned
+# python:3.12-slim and the current one. Checked rather than assumed: neither
+# app/ nor any of the 24 packages in requirements.txt imports sqlite3, so
+# nothing in this image ever opens a SQLite database for the bug to reach.
+CVE-2026-119373
+
 # openssl and pcre2 entries that lived here through M3 are gone as of the
 # M4 base-image bump: python:3.12-slim@sha256:2b4f19da... (pulled fresh,
 # checked against Docker Hub's tags API before pinning) already carries
