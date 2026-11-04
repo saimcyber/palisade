@@ -1,6 +1,6 @@
 M5 verification: a fresh clone, not a copy of local state
 
-CLAUDE.md's "finished" definition includes the acceptance command
+The project's "finished" definition (docs/CONVENTIONS.md) includes the acceptance command
 passing from a clean rebuild, and M5's own acceptance line calls for
 "a stranger can understand the project without you in the room". A
 clean-rebuild test against the working copy (docs/evidence/m5/08-*)

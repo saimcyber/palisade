@@ -16,8 +16,9 @@ REBUILD_RESULT = (
     "found missing - `docs/evidence/m5/08-clean-rebuild.txt`. A separate `git clone` from GitHub into a "
     "directory with no relationship to the working copy then ran the gateway's full test suite (56 "
     "passed) and the environment doctor script (29 passed) with zero setup beyond what the repository "
-    "itself declares - `docs/evidence/m5/09-fresh-clone.txt`. Two deliverables from the plan's own list "
-    "remain open: the Cloudflare Tunnel demo and the short demo video, the second deliberately deferred."
+    "itself declares - `docs/evidence/m5/09-fresh-clone.txt`. `make demo` then exercises every control "
+    "against the live cluster with a pass/fail check per step, and `make tunnel` put the platform on a "
+    "public URL - `docs/evidence/m5/10-public-tunnel.txt`."
 )
 
 
@@ -46,19 +47,22 @@ def cover(D):
             ["Milestone", "**M5 - Resilience, Proof and Storytelling**"],
             ["Goal", "Prove the platform performs under load, survives real failures, and can be "
                      "understood by a stranger without the person who built it in the room"],
-            ["Result", "**Load test, chaos day, and all five engineering documents complete.** Chaos day "
-                       "found two real bugs (fixed, tested, verified live) and one genuine observability "
-                       "gap (also fixed). A clean rebuild and a fresh GitHub clone both passed. The "
-                       "Cloudflare Tunnel demo is the one deliverable still open"],
+            ["Result", "**Passed.** Chaos day found two real bugs and an observability gap; turning it "
+                       "into a repeatable `make demo` found three more, including a Kyverno bypass. All "
+                       "fixed, tested and verified live. The platform runs on a public URL behind a "
+                       "capped demo tenant, opt-in, with its internals unreachable from the internet"],
             ["Rebuild", REBUILD_RESULT],
-            ["Gateway", "Deliberate load shedding in front of vLLM (`InFlightLimiter`, ADR 0024); both "
-                       "chaos-day bugs fixed in `upstream.py` and `routes/chat.py`"],
+            ["Gateway", "Deliberate load shedding in front of vLLM (`InFlightLimiter`, ADR 0024); every "
+                       "upstream failure mode found so far audited as a failure, never a false success; "
+                       "alerted counters initialised at zero so their alerts can actually fire"],
+            ["Edge", "Ingress narrowed from `/` to an allowlist (`/v1/*`, `/healthz`) before going "
+                     "public; Cloudflare Quick Tunnel, operator-run and off by default (ADR 0026)"],
             ["Chaos day", "Six hypotheses written before any experiment ran; five run for real against "
                           "the live cluster - kill vLLM mid-stream, stall Redis, lose Redis, a validly "
                           "signed image from the wrong workflow, an old but genuinely signed image, and "
                           "VRAM exhaustion"],
             ["New docs", "`docs/THREAT-MODEL.md`, `docs/SLO.md`, `docs/RUNBOOK.md`, `docs/COST.md`, "
-                        "`docs/ARCHITECTURE.md`, `docs/POSTMORTEM-001.md`, ADRs 0024-0025"],
+                        "`docs/ARCHITECTURE.md`, `docs/POSTMORTEM-001.md`, ADRs 0024-0026"],
         ],
         widths=[1.35, 5.25],
     )
@@ -168,6 +172,10 @@ def decisions(D):
              "upstream, and separately by hand against the real GPU for real numbers",
              "A self-hosted GitHub Actions runner on this public repo would let any fork's PR execute "
              "code on the machine holding this project's signing material - rejected outright"],
+            ["0026", "The public demo is a Cloudflare Quick Tunnel, run by an operator on the host, in "
+             "front of the Ingress - not an in-cluster Deployment, not a named tunnel",
+             "Public exposure should be a deliberate, visible act, not desired state Argo CD re-creates; "
+             "a Quick Tunnel has no account and no credential to leak or revoke"],
         ],
         widths=[0.5, 2.6, 3.5],
         size=9.2,
@@ -231,6 +239,45 @@ def what_was_built(D):
         "- the only GPU alert that existed, `PalisadeGPUSaturated`, watches compute utilisation, not "
         "memory. `PalisadeGPUMemoryPressure` (`>90%` for `5m`) closes that gap, with its own `promtool` "
         "test cases and a runbook entry carrying the WSL2/WDDM caveat §6 found.")
+    D.h2("4.5  make demo - chaos day, made repeatable")
+    dual(D,
+         "One command walks through everything the platform claims to do, against the real cluster, and "
+         "checks each claim: a real answer streamed from the GPU, bad requests refused, one customer "
+         "running out of budget while another carries on, the cluster refusing to run untrusted software, "
+         "the model server unable to reach the internet, and the model server killed mid-answer and "
+         "recovering by itself. Running it the first time found three problems nothing else had.",
+         "`scripts/demo.sh`, nine sections, each ending in a pass/fail assertion and a non-zero exit if "
+         "any fail. Admission checks are server-side dry runs of the gateway's own live pod spec with only "
+         "the image swapped, so nothing persistent is created; the chaos step deletes the vLLM pod during a "
+         "stream and asserts both the client's error and the audit line. `DEMO_CHAOS=0` skips the slow "
+         "model reload.")
+    D.table(
+        ["What the first run found", "Why nothing caught it before", "Fix"],
+        [
+            ["Kyverno admitted `palisade-gateway:latest`", "`verifyImages` runs in the mutating webhook "
+             "and pins a verified tag to `:latest@sha256:...` before validation, so `!*:latest` no longer "
+             "matched - only for this project's own signed images", "A second rule matching `!*:latest@*`"],
+            ["A stream killed by vLLM's *graceful* shutdown was audited `ok`/200", "On SIGTERM vLLM sends "
+             "an in-band `{\"error\": ...}` event and a clean `[DONE]` - no exception, so chaos day's "
+             "`RemoteProtocolError` fix never ran", "Treat the in-band event as `UpstreamError(502)`"],
+            ["`PalisadeTenantBudgetExhausted` never fired", "A labelled counter created on its first "
+             "`.inc()` starts at 1, so `increase()` sees no change", "Create every alerted series at 0 on "
+             "startup"],
+        ],
+        widths=[2.0, 2.8, 1.8],
+        size=8.6,
+    )
+    D.h2("4.6  The public demo, and what it found first")
+    dual(D,
+         "The platform can now be put on a real public web address for anyone to try, using a free "
+         "Cloudflare service that needs no account. Before turning it on, a check showed the front door "
+         "was letting through far more than the API - including a page listing every customer's usage - "
+         "so the front door was tightened first.",
+         "`make tunnel` starts `cloudflared` as a Quick Tunnel against `localhost:8080` with `Host: "
+         "palisade.local`, so the public path is exactly the Traefik Ingress. That Ingress routed `/`, "
+         "exposing `/metrics`, `/docs`, `/openapi.json` and `/readyz` unauthenticated; it is now an "
+         "allowlist of `/v1` and `/healthz`. Verified from the public side: TLS 1.3 at Cloudflare's edge, "
+         "internals `404`, first streamed token at ~0.2s, `tenant-public` limited at exactly 10/min.")
 
 
 # =============================================================================
@@ -349,9 +396,17 @@ def deviations(D):
              "once to narrow an attribution claim the counters couldn't actually support", "Publishing a "
              "wrong conclusion and never revisiting it would be worse than the original mistake"],
             ["(implicit) M5 is 'complete' once chaos day and the docs exist", "The README's status line "
-             "briefly claimed exactly that, then was walked back to an explicit status table", "CLAUDE.md's "
-             "own definition of 'finished' - the acceptance command passing from a clean rebuild, plus "
-             "the milestone document existing - hadn't actually been met yet at that point"],
+             "briefly claimed exactly that, then was walked back to an explicit status table", "The "
+             "plan's own definition of 'finished' - the acceptance command passing from a clean rebuild, "
+             "plus the milestone document existing - hadn't actually been met yet at that point"],
+            ["Cloudflare Tunnel demo (implicitly: point it at the gateway)", "The Ingress was narrowed "
+             "from `/` to an allowlist first, and the tunnel runs on the host, opt-in, never in the "
+             "cluster", "Tunnelling the Ingress as it stood would have published `/metrics`; and public "
+             "exposure as GitOps desired state would be on whenever the cluster runs (ADR 0026)"],
+            ["A short demo video", "A scripted, self-checking `make demo` that performs every step the "
+             "video was meant to show, live; the video is a screen recording of one run", "A script can "
+             "be re-run and fails loudly when something regresses - it found three bugs on its first run, "
+             "which a one-off recording never would have"],
             ["(not in plan) a stale, empty `observability/` directory from M0's original scaffold",
              "Removed; the real dashboards and alert rules have lived in `deploy/observability/` since "
              "M4 and nothing referenced the old path", "Found while bringing the README's repository "
@@ -386,6 +441,9 @@ def tool_choices(D):
             ["Windows' `Get-Counter` GPU adapter-memory counters", "Trusting `nvidia-smi` alone",
              "`nvidia-smi` only ever reports one of two memory pools the WDDM driver actually uses; the "
              "VRAM chaos finding (§6) does not exist without the second counter"],
+            ["**Cloudflare Quick Tunnel**, host-run", "A named tunnel, `ngrok`, an in-cluster "
+             "`cloudflared`, or a forwarded router port", "No account, no credential to store or rotate, "
+             "a new hostname every start, and off unless someone turns it on (ADR 0026)"],
         ],
         widths=[1.9, 2.1, 2.6],
         size=8.8,
@@ -413,10 +471,18 @@ def limitations(D):
              "Only a genuine Pod reschedule, not a same-Pod container restart, is guaranteed to produce "
              "an empty store - documented precisely in `redis-deployment.yaml` and M4's limitations table "
              "after chaos day found the original wording was imprecise"],
-            ["The Cloudflare Tunnel demo and the short demo video are both still open",
-             "The Tunnel needs a public-surface action (a registry/tunnel endpoint) that this session's "
-             "own permission boundaries hand to the operator rather than complete unattended; the video "
-             "is explicitly deferred by choice, not forgotten"],
+            ["Any valid key works through the public tunnel, not only the demo key",
+             "Handing out only `tenant-public`'s key is a procedure, not a control. Enforcing it needs an "
+             "edge rule (Cloudflare Access, or a Traefik middleware) that an account-less Quick Tunnel "
+             "cannot carry"],
+            ["The public URL is ephemeral and carries no uptime guarantee",
+             "By design - a new hostname per start is what makes it safe to run without an account. "
+             "Provisioning can exceed cloudflared's own 15s request timeout; `tunnel.sh` retries three "
+             "times, then fails clearly"],
+            ["Public reachability was only tested from this laptop's own network",
+             "One of the two Cloudflare edge addresses is unreachable from that network specifically, "
+             "which slowed some requests by ~20s. Isolated to the address, not the platform - but a "
+             "second, unrelated network was never tested"],
         ],
         widths=[2.6, 4.0],
         size=9.0,
@@ -448,6 +514,15 @@ def mistakes(D):
              "document existed", "A status claim should point at evidence that already exists, not at "
              "work still in flight - walked back to an explicit table naming exactly what was done and "
              "what wasn't, which turned out to be more useful than the confident version anyway"],
+            ["Fixed chaos day's mid-stream bug for the one shape it was seen in", "The same failure has a "
+             "graceful variant that never raised. A chaos experiment run once is a sample; scripting it "
+             "into `make demo` is what turned it into a test - and it found the variant on the first run"],
+            ["The tunnel script's first version reported `https://api.trycloudflare.com` as the assigned "
+             "URL", "Its regex matched the API endpoint inside an error message. A success check has to "
+             "look for evidence of success, not for any string that resembles it"],
+            ["Read a burst of requests spread over 60+ seconds as a broken rate limit", "Measured the "
+             "requests' timing before blaming the code: the delay was a TCP connect to an unreachable "
+             "edge address, and the limiter was correct. Isolate the variable before fixing anything"],
         ],
         widths=[2.9, 3.7],
         size=9.0,
@@ -505,16 +580,24 @@ def glossary_and_next(D):
              "Linux's NVIDIA driver"],
             ["**OCI referrers**", "A standard way to attach extra artifacts (like a cosign signature) to "
              "an image in a registry, keyed to its exact digest"],
+            ["**Quick Tunnel**", "A Cloudflare tunnel that needs no account: `cloudflared` dials out to "
+             "Cloudflare and gets a random public hostname that forwards to a local port - no inbound "
+             "port is ever opened"],
+            ["**Mutating vs validating webhook**", "Kubernetes admission runs mutating webhooks (which "
+             "may rewrite an object) before validating ones (which only accept or refuse) - why a "
+             "validate rule can see a different image string than the one submitted"],
         ],
         widths=[1.7, 4.9],
         size=9.0,
     )
-    D.h1("13. Open Items Going Into What's Next")
+    D.h1("13. Open Items")
     D.table(
         ["Item", "Action"],
         [
-            ["Cloudflare Tunnel demo", "Set up a public-surface endpoint for a tightly-capped demo tenant"],
-            ["Short demo video", "Deliberately deferred by choice, not forgotten"],
+            ["Any key works through the public tunnel", "An edge rule restricting it to the demo key, if "
+             "the tunnel ever moves to a named, account-backed one"],
+            ["Audit lines are container stdout only", "A log pipeline (Loki or similar) so they outlive "
+             "pod log rotation"],
             ["No Alertmanager receiver (carried from M4)", "Wire one once there's a real notification "
              "channel to use"],
             ["VRAM soft-degradation mechanism never confirmed on native Linux", "Would need a non-WSL2 "
@@ -524,9 +607,10 @@ def glossary_and_next(D):
         size=9.0,
     )
     D.spacer(4)
-    D.callout("Where this goes",
-              "The infrastructure and the proof both exist now: a working platform, a load test that "
-              "found its real ceiling, a chaos day that found and fixed two bugs nothing else would have "
-              "caught, and five documents that let a stranger understand all of it without a guided "
-              "tour. What's left is making it reachable - a public demo link, and the few minutes of "
-              "video that show it working.", "ok")
+    D.callout("Where this ends",
+              "Six milestones, each closed by an acceptance test from a clean rebuild: a GPU in a "
+              "cluster, a model behind an authenticated gateway, a signed supply chain, a cluster that "
+              "only runs what git and its signatures allow, tenants that are metered and watched, and "
+              "now proof - a load test that found the real ceiling, a chaos day and a repeatable demo "
+              "that found bugs nothing else caught, and a public URL a stranger can use. Everything "
+              "claimed here is backed by a transcript in `docs/evidence/`.", "ok")

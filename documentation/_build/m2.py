@@ -101,7 +101,7 @@ def what_it_was_for(D):
         ["#", "Task", "The unknown it tested", "Outcome"],
         [
             ["1-3", "Fresh AWS identity, prove the push works, stand up a billing guard",
-             "Can I even get a working, scoped AWS credential - and is the CI blocker CLAUDE.md named "
+             "Can I even get a working, scoped AWS credential - and is the CI blocker my own status notes named "
              "actually real?", "**One assumption was wrong** - see §8"],
             ["4", "OIDC trust policy on the smallest possible surface",
              "Will GitHub's identity token actually satisfy the trust policy I write?",
@@ -137,7 +137,7 @@ def starting_point(D):
              "Nothing in M2 can start without working AWS access. Removed the stale profile rather than "
              "chase credentials for an account no longer reachable, and built a fresh identity instead - "
              "§5.1."],
-            ["`gh auth` / push permission", "CLAUDE.md's Status table named a specific missing OAuth "
+            ["`gh auth` / push permission", "My status notes named a specific missing OAuth "
              "scope as the blocker before workflow YAML could be pushed",
              "Turned out not to apply at all: `gh` isn't installed in this environment, and the actual "
              "push credential already had everything it needed. A stale assumption, caught by testing "
@@ -286,7 +286,7 @@ def how_it_was_done(D):
         "rather than chase access to an account no one could account for. A fresh IAM user "
         "(`palisade-bootstrap`, `AdministratorAccess`, scoped to local one-time bootstrap use only - never "
         "used by CI) replaced it, created directly in the AWS Console.")
-    D.p("Separately, CLAUDE.md's Status table named a specific missing GitHub CLI OAuth scope as the "
+    D.p("Separately, my status notes named a specific missing GitHub CLI OAuth scope as the "
         "blocker before any workflow YAML could be pushed. Rather than run the named remediation on faith, "
         "a throwaway no-op workflow file was pushed on a branch first.")
     D.code(
@@ -421,7 +421,7 @@ def pipeline_bugs(D):
     D.p("Fixed with a policy shared by both roles, scoped to only the `app/` key prefix in the state "
         "bucket - explicitly never `bootstrap/`, which stays off-limits to any CI identity regardless.")
 
-    D.h2("6.4  `gitleaks` crashed on the CI runner - not a config problem, an upstream one")
+    D.h2("6.4  gitleaks crashed on the CI runner - not a config problem, an upstream one")
     dual(D,
          "The lint job's secret-detection hook, which had passed on every local run all session, crashed "
          "outright the first time it ran in GitHub Actions - a stack trace, not a finding.",
@@ -482,7 +482,7 @@ def deviations(D):
             ["2", "The AWS CLI's existing profiles could be used or repaired", "**A fresh IAM user "
              "(`palisade-bootstrap`) created from scratch**", "The default profile's keys were dead and "
              "an existing SSO profile belonged to a different, unrecoverable login - §5.1."],
-            ["3", "CLAUDE.md named a specific missing OAuth scope as the CI blocker",
+            ["3", "My status notes named a specific missing OAuth scope as the CI blocker",
              "**No remediation needed - the assumption was stale**", "Tested empirically with a throwaway "
              "probe workflow before trusting the note - §5.1."],
             ["4", "OIDC trust policy written as `repo:owner/repo:...`", "**Rewritten to GitHub's "

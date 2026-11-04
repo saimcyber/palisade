@@ -33,7 +33,7 @@ pipeline", a bootstrap race that skips enforcement is a real hole, not a cosmeti
    3. wait for both to be Available, because Kyverno's webhooks must answer before
       anything syncs;
    4. pre-pull the vLLM image into the node with `ctr pull` (optional, `PREPULL=0`
-      skips it; CLAUDE.md explains why `k3d image import` cannot be used);
+      skips it; docs/CONVENTIONS.md explains why `k3d image import` cannot be used);
    5. apply the root Application;
    6. wait until every Application is Synced + Healthy.
 2. **Sync-waves on the child Applications**: `palisade-policies` -1, `palisade-secrets` 0,

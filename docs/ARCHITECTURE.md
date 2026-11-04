@@ -4,17 +4,17 @@
 
 ```mermaid
 flowchart TB
-    subgraph internet["Public internet (planned)"]
-        caller["API caller"]
+    subgraph internet["Public internet"]
+        caller["API caller\n(tenant-public key)"]
     end
 
-    subgraph tunnel["Cloudflare Tunnel"]
-        cf["cloudflared"]
+    subgraph tunnel["Cloudflare Quick Tunnel - opt-in, make tunnel (ADR 0026)"]
+        cf["cloudflared\n(host process, TLS at Cloudflare's edge)"]
     end
 
     subgraph k8s["k3d cluster (WSL2, RTX 3050)"]
         subgraph palisade_ns["namespace: palisade"]
-            ingress["Traefik Ingress"]
+            ingress["Traefik Ingress\nallowlist: /v1/* and /healthz only"]
             gw["Gateway (FastAPI)\nauth · guard · budget · cache · load-shed"]
             redis["Redis\nrate limits · budgets · cache"]
             vllm["vLLM\nQwen3-0.6B, zero egress"]
@@ -28,9 +28,9 @@ flowchart TB
             gpuexp["gpu-exporter\n(project-built)"]
         end
 
-        subgraph argocd_ns["namespace: argocd"]
+        subgraph control_ns["namespaces: argocd, kyverno"]
             argocd["Argo CD\napp-of-apps, self-heal"]
-            kyverno["Kyverno\nsignature + pod-security policy"]
+            kyverno["Kyverno\nsignature, :latest and pod-security policy"]
         end
     end
 
@@ -40,7 +40,7 @@ flowchart TB
         ghcr["GHCR\nsigned images"]
     end
 
-    caller -->|HTTPS| cf -->|localhost only| ingress
+    caller -->|HTTPS| cf -->|"localhost:8080, Host: palisade.local"| ingress
     ingress --> gw
     gw --> redis
     gw -->|"X-Request-ID"| vllm

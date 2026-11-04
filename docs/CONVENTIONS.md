@@ -19,7 +19,7 @@ together — which is why the stack is split into `make up-lite` and `make up-fu
 ## Entry points
 
 ```bash
-make doctor      # 28 environment checks; exits non-zero, so CI can gate on it
+make doctor      # every environment check; exits non-zero, so CI can gate on it
 make tools       # install/upgrade the pinned toolchain (idempotent)
 make up          # create the cluster with GPU support
 make gpu-check   # acceptance test: a scheduled pod must drive the GPU
@@ -31,9 +31,28 @@ make down        # tear down
 ## How I track progress
 
 The project is organised as milestones **M0–M5**, each with an acceptance test
-that has to pass before I call it done. I keep a running [devlog](devlog.md) with
-dated entries — what I did, what broke, what I learned — and at the end of each
-milestone I write that up properly (see [`documentation/`](../documentation/)).
+that has to pass before I call it done. I keep a running [devlog](devlog.md) —
+what I did, what broke, what I learned — and at the end of each milestone I write
+that up properly (see [`documentation/`](../documentation/)).
+
+**Tracked by goal, not by schedule.** No calendar dates, no day or week
+allocations, no "took an afternoon" anywhere in the repo - a milestone takes as
+long as it takes, and estimates on a solo project only invite shortcuts in
+exactly the places that matter. Runtime behaviour is exempt (`--timeout=180s`,
+TTLs, retry budgets, latency SLOs - those are measurements, not deadlines).
+`make check-time` enforces it on every tracked file.
+
+**What "finished" means for a milestone** - all three, not some:
+1. its acceptance command passes from a **clean rebuild** (`make down && make up
+   && make gitops`), not from a machine that happens to be in a good state;
+2. every decision taken along the way has an ADR in `docs/adr/`;
+3. its document in `documentation/` is written - what was built, what differed
+   from the plan, the limitations, and why each tool beat its alternatives.
+
+**Scratch-pod testing.** When something in the cluster misbehaves, I reproduce
+and fix it with throwaway pods against the live cluster first - no CI run, no
+image push, no PR, and nothing Argo CD's self-heal can revert mid-test. Only once
+the fix is proven live does it become a real change.
 
 ## Things I've settled on
 
@@ -89,6 +108,14 @@ internal IPC) with a URI, crashing with `ValueError: VLLM_PORT '...' appears to 
 URI`. The "Unknown vLLM environment variable" warnings for `VLLM_SERVICE_HOST` etc. seen
 earlier were the same collision - mostly harmless noise, except for this one. Fix:
 `enableServiceLinks: false` on the pod spec, which stops the injection entirely.
+
+`k3d image import` fails on multi-arch images under the containerd snapshotter:
+`docker save` on a manifest-list tag (like `vllm/vllm-openai`) exports a reference
+to platforms that were never pulled, and `ctr images import` then fails with
+`content digest ... not found` - while still printing "Successfully imported".
+Instead, pull directly inside the node: `docker exec <node> ctr -n k8s.io images
+pull --platform linux/amd64 <image>`, which also streams layer by layer rather than
+holding one ~9 GB tar in memory.
 
 ## Supply chain (M2)
 

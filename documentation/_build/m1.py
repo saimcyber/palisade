@@ -379,7 +379,7 @@ def bug_hunt(D):
         "two, the identical settings. Each is the kind of finding that only shows up by actually running the "
         "thing end to end, which is the argument for doing exactly that before calling a milestone done.")
 
-    D.h2("6.1  Bug 1 - `k3d image import` silently fails on a multi-arch image")
+    D.h2("6.1  Bug 1 - k3d image import silently fails on a multi-arch image")
     dual(D,
          "The tool used to load vLLM's ~9 GB image into the cluster reported success while the image was "
          "not actually there. It took importing the image a second way to notice.",
@@ -397,12 +397,12 @@ def bug_hunt(D):
         "  ctr -n k8s.io images pull --platform linux/amd64 docker.io/vllm/vllm-openai:v0.28.0"
     )
     D.p("This also turned out to be the lower-risk path for an unrelated reason: attempting the "
-        "`docker save` (an ~8.6 GB tar) then `ctr images import` route was killed twice by the harness's "
+        "`docker save` (an ~8.6 GB tar) then `ctr images import` route was killed twice by a "
         "low-memory guard mid-transfer, inside a 10 GB WSL2 RAM cap already shared with an unrelated "
         "active project's containers. The direct registry pull streams layer by layer and never holds the "
         "whole image in memory at once.")
 
-    D.h2("6.2  Bug 2 - the same `--gpu-memory-utilization` that worked on host Docker, OOMs in-cluster")
+    D.h2("6.2  Bug 2 - the same --gpu-memory-utilization that worked on host Docker, OOMs in-cluster")
     dual(D,
          "The exact settings that worked a moment earlier, in a plain Docker container, ran out of GPU "
          "memory every time inside Kubernetes - and lowering the settings further barely helped, which was "
