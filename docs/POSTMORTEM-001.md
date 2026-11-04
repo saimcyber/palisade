@@ -151,12 +151,48 @@ what the exercise is for:
   (`PalisadeGPUSaturated`), even though the test's own Prometheus data
   showed memory pressure peaking at ~95.4% of the card.
 
+## Addendum: the fix for bug #1 covered one of two variants
+
+Turning chaos day into a repeatable script (`make demo`, which kills vLLM
+mid-stream on every run rather than once) found that the
+`RemoteProtocolError` fix was incomplete. Killing vLLM produces one of two
+behaviours depending on timing. If the process dies hard, the connection
+drops mid-chunk - the case chaos day saw and fixed. If vLLM shuts down
+*gracefully* on the pod's SIGTERM, it does not drop the connection at
+all: v0.28 emits an in-band `data: {"error": {...}}` event and then a
+clean `data: [DONE]`. Nothing raises, so the gateway relayed vLLM's raw
+error to the client and audited the request `outcome="ok"`,
+`status=200`, zero tokens - the same false success, through the other
+door. The stream now treats an in-band error event as an
+`UpstreamError(502)`, replaces vLLM's internal error with the gateway's
+own, and audits `upstream_error`; a regression test feeds the exact event
+shape vLLM's own source defines.
+
+The same run found two more things nothing else had caught:
+
+- **`PalisadeTenantBudgetExhausted` could not fire on the first rejection
+  after a gateway restart.** Labelled counters were only created on their
+  first `.inc()`, so the series appeared with its first sample already at
+  `1` and `increase()` saw no change. Confirmed live - counter at 1,
+  `increase()` at 0, no alert. Every known labelled series is now created
+  at 0 on startup.
+- **The streaming error event could be invalid JSON.** It was built with
+  an f-string, and vLLM's own JSON error body (carried in the detail on a
+  non-200 response) broke it. Now `json.dumps`.
+
+The lesson repeats one level up: the first chaos-day pass fixed the
+failure it observed and assumed that was the only shape it came in. A
+chaos experiment run once is a sample; run every time, it is a test.
+
 ## Action items
 
 | Action | Status |
 | --- | --- |
 | Catch `httpx.RemoteProtocolError` in the streaming path | Done |
+| Treat vLLM's in-band `{"error": ...}` stream event as an upstream error (the graceful-shutdown variant) | Done - `app/upstream.py`, `tests/test_streaming.py` |
 | Catch `redis.exceptions.RedisError` around the request handler | Done |
+| Create alerted labelled-counter series at 0 on startup | Done - `app/observability.py::initialise_labelled_counters`, `tests/test_metrics_init.py` |
+| Make the chaos experiment repeatable instead of a one-off | Done - `make demo` §8 |
 | Correct `redis-deployment.yaml` / M4 doc's restart-reset claim | Done |
 | Add a GPU memory-pressure alert (found during experiment 5) | Done - `PalisadeGPUMemoryPressure`, `deploy/observability/prometheus-config.yaml` |
 | Re-run the VRAM exhaustion experiment on a native Linux host, if one becomes available, to confirm the hard-OOM prediction | Not done - no such host available to this project |
@@ -173,8 +209,7 @@ found by a single `kubectl delete pod` and a single `redis-cli CLIENT
 PAUSE` command - no special tooling, no long investigation, just
 actually breaking the thing on purpose. The actual lesson is not
 "write chaos tests" as a one-time M5 deliverable - it's that an
-audit-logging
-system's correctness claims are only as strong as the failure modes
+audit-logging system's correctness claims are only as strong as the failure modes
 someone has actually gone looking for, and this project's own
 dependencies (vLLM, Redis) still have failure modes nobody has tested
 yet.

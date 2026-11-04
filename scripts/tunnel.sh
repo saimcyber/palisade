@@ -55,20 +55,36 @@ up() {
 
   step "Starting the Quick Tunnel"
   mkdir -p "$STATE"
-  : > "$LOG_FILE"
-  nohup cloudflared tunnel --no-autoupdate \
-    --url "$LOCAL_URL" --http-host-header "$HOST_HEADER" \
-    >"$LOG_FILE" 2>&1 &
-  echo $! > "$PID_FILE"
-
-  local url=""
-  for _ in $(seq 1 60); do
-    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG_FILE" | head -1 || true)
-    [ -n "$url" ] && break
-    running || die "cloudflared exited early - see $LOG_FILE"
-    sleep 1
+  # Quick Tunnels carry no uptime guarantee, and provisioning one can take
+  # longer than cloudflared's own fixed 15s request timeout - seen live (an
+  # 18s provisioning call, "context deadline exceeded"). A bounded retry, not
+  # an open-ended loop: three attempts, then a clear failure.
+  local url="" attempt reason=""
+  for attempt in 1 2 3; do
+    : > "$LOG_FILE"
+    nohup cloudflared tunnel --no-autoupdate \
+      --url "$LOCAL_URL" --http-host-header "$HOST_HEADER" \
+      >"$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    for _ in $(seq 1 60); do
+      # api.trycloudflare.com is the endpoint cloudflared *requests* a tunnel
+      # from - it also appears in the log when that request fails, so it must
+      # never be mistaken for the assigned URL.
+      url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG_FILE" \
+              | grep -v '^https://api\.trycloudflare\.com$' | head -1 || true)
+      [ -n "$url" ] && break 2
+      if grep -q 'failed to request quick Tunnel' "$LOG_FILE"; then
+        reason=$(grep 'failed to request quick Tunnel' "$LOG_FILE" | tail -1)
+        break
+      fi
+      running || { reason="cloudflared exited early"; break; }
+      sleep 1
+    done
+    down >/dev/null
+    note "attempt $attempt/3 failed: ${reason#*: }"
+    sleep 5
   done
-  [ -n "$url" ] || { down >/dev/null; die "no tunnel URL after 60s - see $LOG_FILE"; }
+  [ -n "$url" ] || die "no tunnel after 3 attempts - Cloudflare's Quick Tunnel service may be degraded (see $LOG_FILE)"
   echo "$url" > "$URL_FILE"
   ok "assigned $url"
 
