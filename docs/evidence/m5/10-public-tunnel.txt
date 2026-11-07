@@ -23,7 +23,7 @@ Tunnelling that Ingress as it stood would have published all of it -
 and docs/THREAT-MODEL.md already claimed the tunnel would expose /v1/*
 only, a claim that was not yet true. Fixed by changing the Ingress from
 `path: /` to an explicit allowlist (/v1 Prefix, /healthz Exact), commit
-48cf77a, deployed by Argo CD with no manual apply. Prometheus scrapes
+98fd9bc, deployed by Argo CD with no manual apply. Prometheus scrapes
 the Service directly, so all five scrape targets stayed `up`.
 
 === from the public internet, after the fix ===
