@@ -176,6 +176,10 @@ def decisions(D):
              "front of the Ingress - not an in-cluster Deployment, not a named tunnel",
              "Public exposure should be a deliberate, visible act, not desired state Argo CD re-creates; "
              "a Quick Tunnel has no account and no credential to leak or revoke"],
+            ["0027", "Gateway readiness probes `/healthz`, not `/readyz`; `/readyz` stays as an "
+             "operator's dependency check",
+             "Every replica shares one vLLM and one Redis, so dependency-gated readiness removes them all "
+             "at once - hiding the outage from the audit log, the metrics and the SLO alert"],
         ],
         widths=[0.5, 2.6, 3.5],
         size=9.2,
@@ -278,6 +282,21 @@ def what_was_built(D):
          "exposing `/metrics`, `/docs`, `/openapi.json` and `/readyz` unauthenticated; it is now an "
          "allowlist of `/v1` and `/healthz`. Verified from the public side: TLS 1.3 at Cloudflare's edge, "
          "internals `404`, first streamed token at ~0.2s, `tenant-public` limited at exactly 10/min.")
+    D.h2("4.7  An outage the platform could not see")
+    dual(D,
+         "The second time the demo ran, the gateway's numbers vanished from the monitoring system "
+         "exactly while the model server was down - the moment they mattered most. The cause was a health "
+         "check that took the gateway out of service whenever the model server was down, so nobody saw "
+         "the failures it would otherwise have recorded. The gateway now stays in service and reports "
+         "each failure itself.",
+         "Readiness was `/readyz`, which checks vLLM and Redis. With vLLM restarting, the single gateway "
+         "pod left its Service: callers got Traefik's anonymous `503 no available server`, and "
+         "`up{job=\"palisade-gateway\"}` read `0` for the whole outage because Prometheus scrapes through "
+         "that Service. Readiness now probes `/healthz` (ADR 0027); the request path already fails "
+         "closed per request. The SLO alert was corrected with it - it counted load-shed `503`s as "
+         "errors, contradicting `docs/SLO.md` - and now subtracts `palisade_load_shed_total`, with "
+         "`promtool` cases proving shedding doesn't page and an unreachable upstream does. The final "
+         "demo run asserts both: the gateway's own `503` during the kill, and an unbroken scrape target.")
 
 
 # =============================================================================
@@ -523,6 +542,12 @@ def mistakes(D):
             ["Read a burst of requests spread over 60+ seconds as a broken rate limit", "Measured the "
              "requests' timing before blaming the code: the delay was a TCP connect to an unreachable "
              "edge address, and the limiter was correct. Isolate the variable before fixing anything"],
+            ["Wired readiness to shared dependencies back in M1, and documented it as a safety feature",
+             "It looked protective and was tested to return 503 - but with one shared vLLM it could only "
+             "ever remove every replica at once. Ask what a probe failing actually changes for traffic, not "
+             "just whether it fails correctly"],
+            ["A runbook step used `curl` inside an image that has none", "Never ran it verbatim. Every "
+             "command in a runbook gets executed exactly as written before it ships"],
         ],
         widths=[2.9, 3.7],
         size=9.0,

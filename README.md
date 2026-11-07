@@ -4,11 +4,10 @@
 GitOps-delivered LLM serving with a verified supply chain, per-tenant token
 budgets, and policy enforcement at admission.
 
-> Status: **M5 in progress — resilience and proof.** Chaos day, the load
-> test, all five engineering documents below, and a clean-rebuild
-> acceptance pass are done; the Cloudflare Tunnel demo and the milestone's
-> own Word doc are not yet — see the [status table](#status) for exactly
-> what's left. A signed image built from
+> Status: **M0–M5 complete.** The whole platform reproduces from
+> `make up && make gitops`, `make demo` exercises every control against the
+> live cluster, and `make tunnel` puts it on a public URL behind a capped
+> demo tenant. See the [status table](#status). A signed image built from
 > the wrong GitHub Actions workflow is refused by Kyverno exactly like an
 > unsigned one, even though the signature itself is real —
 > [recorded run](docs/evidence/m5/05-chaos-wrong-identity-signature.txt). Two
@@ -24,6 +23,22 @@ budgets, and policy enforcement at admission.
 > Everything from M3/M4 — Argo CD deploys from git, per-tenant budgets and
 > rate limits, Prometheus/Grafana watching without being able to block
 > anything — still holds, verified from a clean rebuild.
+
+```mermaid
+flowchart LR
+    caller["API caller"] -->|"HTTPS (opt-in tunnel)"| cf["Cloudflare<br/>Quick Tunnel"]
+    cf --> ingress["Ingress<br/>/v1/* and /healthz only"]
+    ingress --> gw["Gateway<br/>auth · guard · budgets · cache · load shedding"]
+    gw --> redis[("Redis<br/>limits · budgets · cache")]
+    gw --> vllm["vLLM on the RTX 3050<br/>no egress"]
+    verify["model-verify<br/>signed weight manifest"] -.-> vllm
+    git["git push to main"] --> ci["CI: test · scan · SBOM · sign"] --> ghcr["GHCR"]
+    git --> argo["Argo CD"] --> kyverno{"Kyverno<br/>signature · :latest · pod security"}
+    ghcr -.-> kyverno -->|admits| gw
+    prom["Prometheus + Grafana<br/>7 alert rules"] -.->|scrape| gw
+```
+
+Full diagrams, sync-wave ordering and trust boundaries: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### This is what happens when you try to deploy an unsigned image
 
@@ -57,9 +72,34 @@ a real signature isn't enough; it has to be *this repo's* signature.
 | M2 Supply chain & CI/CD | Complete — signed, SBOM-attested image on ghcr.io; OIDC-only AWS access |
 | M3 Kubernetes, GitOps & policy | Complete — push deploys itself; unsigned image refused; verified from a clean rebuild |
 | M4 Platform & observability | Complete — per-tenant budgets/rate limits enforced live; Prometheus+Grafana+alerts running, verified from a clean rebuild |
-| M5 Resilience & proof | **In progress.** Done: k6 saturation test in CI, chaos day (5 experiments, 2 real bugs found/fixed/verified live), load shedding, all five docs (`ARCHITECTURE`/`THREAT-MODEL`/`SLO`/`RUNBOOK`/`COST`), the blameless postmortem, the GPU memory alert chaos day found missing, a full `make down && make up && make gitops` clean-rebuild verification ([run](docs/evidence/m5/08-clean-rebuild.txt)), and a fresh clone from GitHub with its own test suite and environment check passing clean ([run](docs/evidence/m5/09-fresh-clone.txt)). Not yet done: the Cloudflare Tunnel demo and the M5 engineering Word doc. The demo video called for in the plan is deliberately deferred. |
+| M5 Resilience & proof | Complete — k6 saturation test in CI, load shedding, chaos day (real bugs found, fixed and verified live), a repeatable `make demo`, the public tunnel ([evidence](docs/evidence/m5/10-public-tunnel.txt)), all five engineering docs and a postmortem; verified from a clean rebuild ([run](docs/evidence/m5/08-clean-rebuild.txt)) and a fresh GitHub clone ([run](docs/evidence/m5/09-fresh-clone.txt)) |
 
+## See it run
 
+```bash
+make demo          # the whole platform, live, with pass/fail checks (DEMO_CHAOS=0 skips the vLLM kill)
+make tunnel        # a public https URL for the capped demo tenant; make tunnel-down to stop it
+make dashboards    # Grafana on http://localhost:3000 - SLO, GPU, Cost & Tenancy, Security
+```
+
+`make demo` runs against the real cluster, nothing mocked: a streamed
+completion from the GPU, auth and the prompt guard refusing bad requests,
+one tenant exhausting its budget while another is unaffected, Kyverno
+admitting a signed image and refusing a wrong-signer image and a `:latest`
+tag, NetworkPolicies blocking lateral movement and vLLM's egress, vLLM
+deleted mid-stream and recovering on its own, and what Prometheus recorded
+about all of it - [a full passing run](docs/evidence/m5/11-make-demo-run.txt).
+Its first run found three real bugs - a Kyverno bypass
+for `:latest`, a second variant of a chaos-day audit bug, and an alert
+that could never fire - see the [postmortem's addendum](docs/POSTMORTEM-001.md).
+
+The public URL is a Cloudflare Quick Tunnel - no account, no token, a new
+hostname every start - and it is off unless someone runs `make tunnel`.
+Only the `tenant-public` key (10 requests/minute, 3000 tokens) is handed
+out. Why it's built this way, and what it doesn't protect against:
+[ADR 0026](docs/adr/0026-public-demo-tunnel.md).
+
+## Why I'm building this
 
 This is a personal learning project. I'm a Cyber Security undergrad going into
 platform / DevOps engineering, and I wanted one project where I actually build
@@ -131,7 +171,7 @@ The whole Linux VM is capped at 10 GB of RAM, so the stack is split:
 | Target | Contents |
 | --- | --- |
 | `make up-lite` | Cluster + GPU support (the application arrives via `make gitops`) |
-| `make up-full` | Reserved for M4's observability stack — today identical to `up-lite` |
+| `make up-full` | Identical to `up-lite` — M4's observability stack measured small enough to always run, via GitOps (ADR 0023) |
 
 Turning off what you are not currently working on is a deliberate operational
 choice on constrained hardware, not a shortcut.
@@ -145,7 +185,7 @@ deploy/                Helm chart, Argo CD apps, Kyverno policies, SOPS secrets
 deploy/observability/  Grafana dashboards and Prometheus alert rules
 docker/                the GPU-capable k3s node image, the project-built gpu-exporter
 scripts/               lifecycle and verification scripts
-k8s/                   standalone manifests (currently the GPU acceptance test)
+k8s/                   standalone M0/M1 acceptance-test manifests (GPU, CUDA, bare vLLM)
 docs/                  architecture, ADRs, threat model, SLO, runbook, cost, postmortems
 docs/evidence/         raw transcripts proving each milestone's claims, M3 through M5
 documentation/         a Word document per milestone — what was built and why
@@ -159,7 +199,7 @@ tests/                 unit, integration and k6 load tests
 - [`docs/SLO.md`](docs/SLO.md) — the SLIs/targets this platform is actually measured against
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — one entry per alert that actually exists, no speculative entries
 - [`docs/COST.md`](docs/COST.md) — real cloud GPU pricing vs. real hosted-API pricing, worked out honestly
-- [`docs/POSTMORTEM-001.md`](docs/POSTMORTEM-001.md) — two real bugs chaos testing found, blameless write-up
+- [`docs/POSTMORTEM-001.md`](docs/POSTMORTEM-001.md) — the real bugs chaos testing found, blameless write-up
 - [`docs/evidence/`](docs/evidence/) — raw command transcripts proving every claim above actually happened
 - [`docs/adr/`](docs/adr/) — architecture decision records, including the dead ends and what was rejected
 - [`docs/devlog.md`](docs/devlog.md) — running notes, newest first
