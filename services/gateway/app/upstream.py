@@ -42,7 +42,8 @@ def make_client() -> httpx.AsyncClient:
 
 
 async def check_ready(client: httpx.AsyncClient) -> bool:
-    """Used by /readyz - this is what Kubernetes gates traffic on."""
+    """Used by /readyz - an operator's dependency check, not the kubelet's
+    readiness probe (ADR 0027)."""
     try:
         response = await client.get("/health", timeout=5.0)
         return response.status_code == 200

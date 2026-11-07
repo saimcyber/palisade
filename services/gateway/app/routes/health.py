@@ -4,10 +4,13 @@
 a slow or dead upstream must not make Kubernetes restart a perfectly healthy
 gateway container.
 
-/readyz answers "can this gateway actually serve a request right now" by
-checking the upstream. This is what Kubernetes gates traffic on, and it is
-also the case that is usually left untested: it must return 503, not 200,
-when the upstream is down.
+/readyz answers "are this gateway's dependencies reachable right now" by
+checking vLLM and Redis, and must return 503, not 200, when either is down.
+It is an operator's check, not the kubelet's readiness probe (ADR 0027):
+every replica shares the same vLLM and Redis, so gating traffic on them
+would pull all replicas at once and replace the gateway's own audited 503
+with the ingress's anonymous one. The kubelet probes /healthz instead, and
+the request path itself fails closed when a dependency is down.
 """
 
 from __future__ import annotations
