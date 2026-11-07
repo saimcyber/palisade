@@ -210,6 +210,7 @@ fi
 # =============================================================================
 if [ "$CHAOS" = "1" ]; then
 section "8. Chaos - delete vLLM in the middle of a response"
+CHAOS_START=$(date +%s)
 say "Starting a long streamed answer, then deleting the vLLM pod underneath it:"
 stream "$KEY_A" "Write a detailed paragraph about the history of distributed systems." 400 > /tmp/demo_chaos_stream.txt &
 SPID=$!
@@ -226,7 +227,9 @@ line=$(audit_for "$RID"); echo "  $line"
 check "$line" '*"outcome": "upstream_error"*' "recorded as upstream_error/502 - not a false 'ok'" "audit line should say upstream_error"
 show "a request while vLLM is gone"
 out=$(chat "$KEY_A" "Are you there?" 8); echo "  $out"
-check "$out" '50[23]*' "a clean, fast 5xx - no hang" "expected a 502/503 during the outage"
+check "$out" '503*Upstream model server unreachable*' \
+  "the gateway's own audited 503, fast - it stays in rotation (ADR 0027)" \
+  "expected the gateway's own 503, not the ingress's"
 say "Kubernetes is already replacing the pod; vLLM reloads the model onto the GPU..."
 show "kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=vllm"
 $K -n palisade wait --for=condition=Ready pod -l app.kubernetes.io/name=vllm --timeout=420s >/dev/null 2>&1 \
@@ -246,11 +249,21 @@ prom() {  # prom <promql>
   $K -n monitoring exec deploy/prometheus -- wget -qO- \
     "http://localhost:9090/api/v1/query?query=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "$1")" 2>/dev/null
 }
+if [ "$CHAOS" = "1" ]; then
+  WINDOW=$(( $(date +%s) - CHAOS_START + 30 ))
+  show "min_over_time(up{job=\"palisade-gateway\"}[${WINDOW}s])   # across the vLLM kill"
+  upmin=$(prom "min_over_time(up{job=\"palisade-gateway\"}[${WINDOW}s])" \
+    | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "none")')
+  echo "  $upmin"
+  check "$upmin" '1' "Prometheus never lost the gateway, even with vLLM down" "the gateway scrape target went down during the outage"
+fi
 show "sum by (tenant) (palisade_tenant_tokens_total)"
-prom 'sum by (tenant) (palisade_tenant_tokens_total)' | python3 -c '
+rows=$(prom 'sum by (tenant) (palisade_tenant_tokens_total)' | python3 -c '
 import json,sys
 for r in json.load(sys.stdin)["data"]["result"]:
-    print("  %-14s %8.0f tokens" % (r["metric"].get("tenant","?"), float(r["value"][1])))'
+    print("  %-14s %8.0f tokens" % (r["metric"].get("tenant","?"), float(r["value"][1])))')
+echo "$rows"
+check "$rows" '*tenant-a*' "per-tenant spend recorded" "no per-tenant token series in Prometheus"
 show "palisade_tenant_budget_remaining"
 prom 'palisade_tenant_budget_remaining' | python3 -c '
 import json,sys

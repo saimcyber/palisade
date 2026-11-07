@@ -9,21 +9,30 @@ actual incident.
 
 ## PalisadeSLOBurnRateHigh
 
-**Fires when:** chat-completion `5xx` rate exceeds 5%, sustained `for: 5m`.
+**Fires when:** the chat-completion `5xx` rate, *minus* deliberate
+load-shed `503`s, exceeds 5%, sustained `for: 5m`.
 
-**What it means:** Requests are failing for real (not a deliberate
-`429`/`503`) - something in the gateway, Redis, or vLLM is actually
-broken.
+**What it means:** Requests are failing for real - something in the
+gateway, Redis, or vLLM is actually broken. Load shedding is excluded
+(it has its own alert, `PalisadeLoadShedding`), and since ADR 0027 a vLLM
+or Redis outage *does* count here: the gateway stays in rotation and
+answers each request with an audited `503`, rather than being pulled from
+its Service and leaving the ingress to answer anonymously.
 
 **First checks:**
 1. `kubectl logs -n palisade deploy/palisade-gateway --tail=50` - look
-   for `outcome: "upstream_error"` in the `chat_completion_settled`
-   lines and read the `status` field.
+   for `outcome: "upstream_error"` or `"redis_unavailable"` in the
+   `chat_completion_settled` lines and read the `status` field.
 2. `kubectl get pods -n palisade` - is vLLM `Running` and `1/1`? A
    crashed or restarting vLLM pod is the most likely cause.
-3. `kubectl exec -n palisade deploy/palisade-gateway -- curl -s
-   http://localhost:8080/readyz` - if this returns `503`, check whether
-   it's vLLM or Redis that's unreachable (the response body says which).
+3. Ask the gateway which dependency is down - `/readyz` names it (the
+   image has no `curl`, so use its Python):
+   ```bash
+   kubectl exec -n palisade deploy/palisade-gateway -- python -c \
+     "import urllib.request as u, urllib.error as e
+   try: print(u.urlopen('http://localhost:8080/readyz').read().decode())
+   except e.HTTPError as x: print(x.code, x.read().decode())"
+   ```
 
 **Likely fix:** If vLLM crashed, let it restart (`kubectl get pods -w`)
 and confirm `/readyz` recovers once it does. If Redis is unreachable,

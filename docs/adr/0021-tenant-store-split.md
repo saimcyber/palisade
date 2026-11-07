@@ -65,4 +65,7 @@ cost-attribution dashboard this exists to feed actively misleading.
 - Losing Redis loses rate-limit and budget state (not tenant identity) -
   `/readyz` checks Redis reachability for exactly this reason, so a lost
   Redis takes the gateway out of rotation rather than silently serving with
-  no budget enforcement.
+  no budget enforcement. *(Superseded in part by ADR 0027: the kubelet no
+  longer gates readiness on `/readyz`. No-enforcement-without-Redis still
+  holds, now per request - each one gets an audited `503
+  redis_unavailable` - instead of by removing the gateway from rotation.)*

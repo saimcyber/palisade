@@ -158,3 +158,39 @@ tests:
               severity: page
             exp_annotations:
               summary: "Chat completion error rate over 5% for 5 minutes"
+
+  # Deliberate load shedding is not an SLO error (docs/SLO.md): a third of
+  # traffic shed as 503s, every one of them also counted in
+  # palisade_load_shed_total - must NOT page.
+  - interval: 1m
+    input_series:
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="200",method="POST"}'
+        values: "0+2x10"
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="503",method="POST"}'
+        values: "0+1x10"
+      - series: "palisade_load_shed_total"
+        values: "0+1x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PalisadeSLOBurnRateHigh
+        exp_alerts: []
+
+  # The same 503 rate with no shedding behind it is a genuine failure - an
+  # unreachable vLLM, say, which since ADR 0027 reaches the gateway and is
+  # counted instead of being answered anonymously by the ingress. MUST page.
+  - interval: 1m
+    input_series:
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="200",method="POST"}'
+        values: "0+2x10"
+      - series: 'palisade_http_requests_total{route="/v1/chat/completions",status="503",method="POST"}'
+        values: "0+1x10"
+      - series: "palisade_load_shed_total"
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PalisadeSLOBurnRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: "Chat completion error rate over 5% for 5 minutes"

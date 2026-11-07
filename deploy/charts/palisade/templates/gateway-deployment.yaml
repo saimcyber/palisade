@@ -10,10 +10,11 @@ metadata:
     {{- include "palisade.labels" . | nindent 4 }}
     app.kubernetes.io/name: palisade-gateway
   annotations:
-    # After vLLM (wave 1), never before it. /readyz is only 200 once vLLM
-    # answers, and Argo CD will not start a wave until the previous one is
-    # Healthy - with the gateway in the default wave 0 the two wait on
-    # each other forever (seen on the first real sync).
+    # After vLLM (wave 1): the gateway is only useful once its backend
+    # exists. This used to be load-bearing - readiness was /readyz, which is
+    # only 200 once vLLM answers, so in the same wave the two waited on each
+    # other forever (seen on the first real sync). Readiness no longer
+    # depends on vLLM (ADR 0027), but the ordering is still the right one.
     argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: {{ .Values.gateway.replicas }}
@@ -73,9 +74,17 @@ spec:
               port: http
             periodSeconds: 5
             failureThreshold: 12
+          # /healthz, not /readyz (ADR 0027). /readyz checks vLLM and Redis,
+          # and every gateway replica shares both - so gating readiness on
+          # them never routes around a failure, it only removes every
+          # replica at once. During a vLLM outage that turned the gateway's
+          # own audited, counted 503 into Traefik's anonymous "no available
+          # server", and took the gateway's /metrics out of Prometheus for
+          # exactly the length of the incident. The gateway already fails
+          # closed per request when either dependency is down.
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /healthz
               port: http
             periodSeconds: 10
             failureThreshold: 3

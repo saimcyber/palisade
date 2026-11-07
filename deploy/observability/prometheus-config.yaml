@@ -49,8 +49,19 @@ data:
       - name: palisade
         rules:
           - alert: PalisadeSLOBurnRateHigh
+            # Genuine server errors only: a deliberate load-shed 503 (ADR
+            # 0024) is counted in both palisade_http_requests_total{status=
+            # "503"} and palisade_load_shed_total, so it is subtracted back
+            # out - docs/SLO.md gives shedding no error budget, it is the
+            # system working as designed. Until M5 this rule counted every
+            # 5xx and contradicted that document. `or vector(0)` because a
+            # subtraction with an empty side is empty, which would silence
+            # the alert entirely rather than count zero sheds.
             expr: >-
-              sum(rate(palisade_http_requests_total{route="/v1/chat/completions",status=~"5.."}[5m]))
+              (
+                sum(rate(palisade_http_requests_total{route="/v1/chat/completions",status=~"5.."}[5m]))
+                - (sum(rate(palisade_load_shed_total[5m])) or vector(0))
+              )
               /
               sum(rate(palisade_http_requests_total{route="/v1/chat/completions"}[5m]))
               > 0.05
