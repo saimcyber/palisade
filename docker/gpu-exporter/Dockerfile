@@ -20,7 +20,14 @@
 #
 #  No pip dependencies: the whole exporter is subprocess + http.server.
 # =============================================================================
-FROM python:3.12-slim@sha256:2b4f19dae3a777dfc3b76730bda1e82e1f66ab2a2686fa93ca78edbfb4f04ffe
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+
+# Debian security updates applied at build time, not left to whenever the
+# upstream base is next republished: a base digest can lag a published fix
+# by days (seen: zlib CVE-2026-76844/85091 fixed in deb13u1, base still on
+# +b1). The resulting image is still pinned by digest, and its SBOM records
+# the exact package versions that went in.
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system gpuexp && useradd --system --gid gpuexp --no-create-home gpuexp
 

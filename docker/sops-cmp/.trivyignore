@@ -1,4 +1,8 @@
 # Reviewed, accepted-risk findings only - per docs/adr/0010.
+#
+# Last audit: a scan of this exact image with no ignore file at all, every
+# entry below matched against its result. Two openssl entries became stale
+# with the current base and build-time Debian updates and were removed.
 
 # base OS (python:3.12-slim) - same reasoning as services/gateway/.trivyignore:
 # base-OS packages in a code path this container (sops plus a shell,
@@ -12,19 +16,33 @@ CVE-2026-78409
 CVE-2026-78410
 CVE-2026-9538
 
-# openssl: fix exists in Debian's repo, not yet in this base image digest -
-# checked against Docker Hub's tags API before writing this.
-CVE-2026-75804
-CVE-2026-84782
+# libsqlite3-0: FTS5 and session-extension heap overflows, Debian status
+# "affected", no fix shipped. This image's Python is never invoked - the CMP
+# runs `sh -c "find . -name '*.enc.yaml' -exec sops -d {} \;"` and sops is a
+# static Go binary that does not link SQLite. Checked: no shipped code
+# imports sqlite3.
+CVE-2026-119373
+CVE-2026-119374
+CVE-2026-119379
 
-# sops v3.13.3's own compiled-in Go dependencies (stdlib, golang.org/x/crypto,
-# google.golang.org/grpc) - confirmed by a real scan of this exact image,
-# not copied from docker/model-verify/.trivyignore's cosign findings, even
-# though the two lists overlap substantially (both are Go binaries built
-# around the same toolchain version). sops is invoked here for exactly one
-# thing: `sops -d` on a local file, as a subprocess with no network
-# listener of its own - most of these are server-side or parsing code
-# paths that invocation never reaches.
+# sops v3.13.3's compiled-in Go dependencies. v3.13.3 is the latest sops
+# release (checked against the live GitHub releases API), so there is no
+# release to move to - every fix below exists in a newer module or Go
+# version that no sops release ships yet. sops runs here for exactly one
+# thing: `sops -d` on this repository's own age-encrypted files, with the
+# age key mounted locally. In that mode it opens no network connection,
+# runs no HTTP/2 or TLS server, serves no files, parses no HTML, JWKs or
+# Nickname-profile strings, and verifies no x509 chains - which is where
+# every finding below lives:
+#   older batch (stdlib, x/crypto, grpc server-side): confirmed by a real
+#     scan before M3, same reasoning
+#   CVE-2026-111943  crypto/x509 intermediate denylist (outbound TLS MITM)
+#   CVE-2026-116587  go-jose DoS via crafted RSA JWKs (cloud-KMS auth path)
+#   CVE-2026-56851   x/text Nickname profile panic
+#   CVE-2026-78661   x/net/html quadratic parsing
+#   CVE-2026-78667   net/http Range-header CPU exhaustion (FileServer/ServeContent)
+#   CVE-2026-78669   HTTP/2 SETTINGS-frame CPU exhaustion
+#   CVE-2026-97031   crypto/tls ECH memory exhaustion (TLS *server*)
 CVE-2026-33818
 CVE-2026-39821
 CVE-2026-46600
@@ -36,3 +54,10 @@ CVE-2026-56860
 CVE-2026-56862
 CVE-2026-84304
 CVE-2026-84445
+CVE-2026-111943
+CVE-2026-116587
+CVE-2026-56851
+CVE-2026-78661
+CVE-2026-78667
+CVE-2026-78669
+CVE-2026-97031

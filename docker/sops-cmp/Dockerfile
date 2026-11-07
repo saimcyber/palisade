@@ -15,9 +15,15 @@
 #  404). Built from the same pinned base this project already vets
 #  elsewhere instead.
 # =============================================================================
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+# Debian security updates applied at build time, not left to whenever the
+# upstream base is next republished: a base digest can lag a published fix
+# by days (seen: zlib CVE-2026-76844/85091 fixed in deb13u1, base still on
+# +b1). The resulting image is still pinned by digest, and its SBOM records
+# the exact package versions that went in.
+RUN apt-get update && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops \
     && chmod 0755 /usr/local/bin/sops \
     && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*

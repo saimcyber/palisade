@@ -12,3 +12,11 @@ CVE-2026-78408
 CVE-2026-78409
 CVE-2026-78410
 CVE-2026-9538
+
+# libsqlite3-0: FTS5 and session-extension heap overflows (DoS / code
+# execution on a crafted database, FTS5 index or changeset). Debian status
+# "affected", no fix shipped. The exporter has no pip dependencies and its
+# only code, exporter.py, never imports sqlite3 - checked in the built image.
+CVE-2026-119373
+CVE-2026-119374
+CVE-2026-119379

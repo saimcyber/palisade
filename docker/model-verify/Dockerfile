@@ -16,21 +16,27 @@
 #
 #    docker build -f docker/model-verify/Dockerfile .
 # =============================================================================
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS builder
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS builder
 
 WORKDIR /build
 COPY docker/model-verify/requirements.txt .
 RUN python -m venv /venv \
     && /venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
 
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS runtime
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS runtime
 
 RUN groupadd --system verify && useradd --system --gid verify --no-create-home verify
 
 # cosign, pinned - verifies the manifest's signature before anything in it
 # is trusted. Same version scripts/install-tools.sh pins on the host.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
-    && curl -fsSL https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64 -o /usr/local/bin/cosign \
+# Debian security updates applied at build time, not left to whenever the
+# upstream base is next republished: a base digest can lag a published fix
+# by days (seen: zlib CVE-2026-76844/85091 fixed in deb13u1, base still on
+# +b1). The resulting image is still pinned by digest, and its SBOM records
+# the exact package versions that went in.
+RUN apt-get update && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && curl -fsSL https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 -o /usr/local/bin/cosign \
     && chmod 0755 /usr/local/bin/cosign \
     && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 

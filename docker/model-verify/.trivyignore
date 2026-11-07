@@ -1,9 +1,15 @@
 # Reviewed, accepted-risk findings only - per docs/adr/0010, HIGH/CRITICAL
 # with no upstream fix get a justified entry here, not a loosened gate.
 # Re-evaluate whenever cosign's pinned version (Dockerfile, currently
-# v3.1.3 - verified as the actual latest release, not just assumed) or the
+# v3.1.4 - verified as the actual latest release, not just assumed) or the
 # base image changes: if either has since shipped a fix, remove the
 # matching entry and let a rebuild resolve it instead.
+#
+# Last audit: a scan of this exact image with no ignore file at all, every
+# entry below matched against its result. The move to cosign v3.1.4, the
+# current python:3.12-slim and build-time Debian updates made eighteen
+# earlier entries (cosign's Go dependencies, two openssl CVEs) stale - they
+# were removed, not left in place to quietly widen the gate.
 
 # --- base OS (python:3.12-slim) - same package family as, and same
 # reasoning as, services/gateway/.trivyignore: base-OS packages in a code
@@ -18,40 +24,21 @@ CVE-2026-78409
 CVE-2026-78410
 CVE-2026-9538
 
-# openssl: a fix exists in Debian's own package repo (3.5.7-1~deb13u3) but
-# the python:3.12-slim base image had not yet been rebuilt against it as
-# of the digest pinned in the Dockerfile - checked directly against Docker
-# Hub's tags API before writing this, not assumed. DoS via QUIC flow
-# control / DTLS retransmission info disclosure - this container makes no
-# QUIC or DTLS connections of any kind.
-CVE-2026-75804
-CVE-2026-84782
+# --- libsqlite3-0: FTS5 heap overflows (DoS / code execution on a crafted
+# FTS5 index or prefix query) and a session-extension overflow in
+# sqlite3changeset_apply(). Debian status "affected", no fix shipped. Checked
+# in this image rather than assumed: verify.py imports only the standard
+# library and never SQLite. filelock (pulled in by huggingface_hub) does
+# ship an SQLite-backed ReadWriteLock, but loads sqlite3 lazily on first use
+# of that class, nothing in the image references it, and its SQL uses
+# neither FTS5 nor the session extension - the only code these CVEs live in.
+CVE-2026-119373
+CVE-2026-119374
+CVE-2026-119379
 
-# --- cosign v3.1.3's own compiled-in Go dependencies. cosign is used here
-# for exactly one thing: `cosign verify-blob` against a local file and a
-# local signature bundle, as a subprocess - no gRPC server, no HTML/XML
-# template rendering, no long-lived network listener. v3.1.3 is confirmed
-# the current latest cosign release (checked against the live GitHub
-# releases API); every fix below exists in a newer Go module version, not
-# yet in a cosign release that pulls it in. Most of these CVEs are in
-# server-side or parsing code paths a client-side `verify-blob` call never
-# reaches (grpc-go's own server DoS, html/template XSS, encoding/xml
-# recursion, net/http server-side HTTP/2 issues) - listed anyway, since
-# cosign compiles the whole dependency in regardless of which code path
-# this project's own usage exercises.
-CVE-2026-33818
-CVE-2026-39821
-CVE-2026-39822
-CVE-2026-46600
-CVE-2026-56852
-CVE-2026-56853
-CVE-2026-56854
-CVE-2026-56858
-CVE-2026-56859
-CVE-2026-56860
-CVE-2026-56862
-CVE-2026-56864
-CVE-2026-56865
-CVE-2026-84304
-CVE-2026-84445
-GHSA-hrxh-6v49-42gf
+# --- cosign v3.1.4 (latest release) still vendors golang.org/x/net v0.61.0:
+# x/net/html quadratic-time parsing of crafted HTML (fixed in 0.62.0, in no
+# cosign release yet). cosign here runs one `verify-blob` against a local
+# bundle; at worst a hostile HTML response would stall this one-shot Job,
+# which fails closed - vLLM never starts. Availability only, never integrity.
+CVE-2026-78661
